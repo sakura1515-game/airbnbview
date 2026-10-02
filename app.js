@@ -191,7 +191,7 @@ function makeCellContent(room) {
 }
 
 function goToProfile(target) {
-  var profTabBtn = document.querySelectorAll('.tab-item')[2];
+  var profTabBtn = document.querySelectorAll('.tab-item')[0];
   switchTab('prof', profTabBtn);
 
   setTimeout(function() {
