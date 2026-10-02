@@ -179,15 +179,30 @@ function makeCellContent(room) {
   if (!room) return '-';
   var s = String(room.status || '-');
   var p = room.price || '-';
+  var note = String(room.note || '').trim();
+
   var bCls = 'status-booked';
-  if (s.indexOf('공실') !== -1) bCls = 'status-vacant';
-  else if (s.indexOf('마감') !== -1) bCls = 'status-closed';
+  if (s.indexOf('공실') !== -1) {
+    bCls = 'status-vacant';
+    // 가격 할인/인상 뱃지 색상 세분화
+    if (s.indexOf('▼') !== -1) bCls += ' badge-down';
+    else if (s.indexOf('▲') !== -1) bCls += ' badge-up';
+  } else if (s.indexOf('마감') !== -1) {
+    bCls = 'status-closed';
+  }
 
+  // 텍스트 간소화 (예: '공실(▼1.5만)'은 그대로 살려 변동폭 노출)
   var shortStatus = s;
-  if (s.indexOf('마감') !== -1) shortStatus = s.replace(' ', '');
-  else if (s.indexOf('공실') !== -1) shortStatus = '공실';
+  if (s === '공실') shortStatus = '공실';
 
-  return '<div class="cell-box"><span class="cell-badge ' + bCls + '">' + shortStatus + '</span><span class="cell-price">' + p + '</span></div>';
+  var hasNoteCls = note ? ' has-note' : '';
+  // 메모가 있을 경우 data-note 속성에 저장
+  var noteAttr = note ? ' data-note="' + encodeURIComponent(note) + '"' : '';
+
+  return '<div class="cell-box' + hasNoteCls + '"' + noteAttr + '>' +
+           '<span class="cell-badge ' + bCls + '">' + shortStatus + '</span>' +
+           '<span class="cell-price">' + p + '</span>' +
+         '</div>';
 }
 
 function goToProfile(target) {
@@ -409,3 +424,79 @@ function fmtPrice(v) {
   var n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
   return isNaN(n) ? v : '₩' + n.toLocaleString();
 }
+
+
+// ----------------------------------------------------
+// 스프레드시트 메모(Note) 모바일 터치 & PC 마우스 오버 처리
+// ----------------------------------------------------
+var tooltipEl = null;
+
+function getOrCreateTooltip() {
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'note-tooltip';
+    document.body.appendChild(tooltipEl);
+  }
+  return tooltipEl;
+}
+
+function showNoteTooltip(e, noteText) {
+  var tip = getOrCreateTooltip();
+  tip.innerText = decodeURIComponent(noteText);
+  tip.style.display = 'block';
+
+  var rect = e.target.closest('.cell-box').getBoundingClientRect();
+  var tipWidth = 230;
+  
+  // 화면 밖으로 나가지 않도록 좌우 위치 보정
+  var left = rect.left + window.scrollX;
+  if (left + tipWidth > window.innerWidth) {
+    left = window.innerWidth - tipWidth - 16;
+  }
+  if (left < 10) left = 10;
+
+  // 상단으로 띄우되, 화면 위로 벗어나면 셀 아래로 배치
+  var top = rect.top - 10;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+  tip.style.transform = 'translateY(-100%)';
+
+  if (rect.top < 80) {
+    tip.style.top = (rect.bottom + 8) + 'px';
+    tip.style.transform = 'none';
+  }
+}
+
+
+function hideNoteTooltip() {
+  if (tooltipEl) tooltipEl.style.display = 'none';
+}
+
+// 이벤트 위임으로 셀 터치 및 마우스 이벤트 감지
+document.addEventListener('mouseover', function(e) {
+  var target = e.target.closest('.cell-box.has-note');
+  if (target) {
+    var note = target.getAttribute('data-note');
+    if (note) showNoteTooltip(e, note);
+  }
+});
+
+document.addEventListener('mouseout', function(e) {
+  if (e.target.closest('.cell-box.has-note')) {
+    hideNoteTooltip();
+  }
+});
+
+// 모바일 탭 터치 지원
+document.addEventListener('click', function(e) {
+  var target = e.target.closest('.cell-box.has-note');
+  if (target) {
+    var note = target.getAttribute('data-note');
+    if (note) {
+      e.stopPropagation();
+      showNoteTooltip(e, note);
+    }
+  } else {
+    hideNoteTooltip();
+  }
+});
