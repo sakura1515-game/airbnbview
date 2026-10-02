@@ -97,9 +97,7 @@
     .price-sugg { font-size: 0.7rem; color: var(--accent); }
     .market-col { width: 40px; text-align: right; font-size: 0.75rem; font-weight: 600; color: var(--yellow); }
 
-    /* ----------------------------------------------------
-       대시보드 매트릭스 테이블 & 2D Sticky 레이아웃
-       ---------------------------------------------------- */
+    /* 대시보드 매트릭스 테이블 & 2D Sticky */
     .matrix-wrapper {
       position: relative; overflow-x: auto; overflow-y: auto;
       max-height: calc(100vh - 145px); -webkit-overflow-scrolling: touch;
@@ -113,7 +111,7 @@
     }
     .matrix-table thead th { position: sticky; top: 0; background: #192338; z-index: 20; font-weight: 600; height: 34px; }
 
-    /* [기본 뷰] 좌측 3열 고정 (모바일 최적화) */
+    /* [기본 뷰] 좌측 3열 고정 */
     .col-fixed-1 { position: sticky; left: 0; width: 41px; min-width: 41px; max-width: 41px; background: #121929; z-index: 10; font-size: 0.68rem; padding: 6px 1px !important; }
     .col-fixed-2 { position: sticky; left: 41px; width: 46px; min-width: 46px; background: #121929; z-index: 10; }
     .col-fixed-3 { position: sticky; left: 87px; width: 68px; min-width: 68px; background: #16243d; border-right: 2px solid var(--accent) !important; box-shadow: 3px 0 8px rgba(0,0,0,0.5); z-index: 10; }
@@ -131,7 +129,6 @@
     }
     .col-fixed-trans.is-my { background: #16243d; color: var(--accent); }
 
-    /* [타임라인 뷰] 세로 스크롤 시 상단 3개 행 고정 (핵심) */
     .row-sticky-market td { position: sticky; top: 34px; background: #172033; z-index: 20; height: 34px; }
     .row-sticky-market td.col-fixed-trans { z-index: 35; background: #192338; top: 34px; }
 
@@ -146,7 +143,6 @@
     .col-comp { width: 68px; min-width: 68px; }
     .col-day-trans { width: 58px; min-width: 58px; }
 
-    /* 태블릿 / 펼친 화면(600px 이상) 미디어 쿼리: 시원하게 너비 확장 */
     @media (min-width: 600px) {
       .col-fixed-1 { width: 48px; min-width: 48px; max-width: 48px; font-size: 0.72rem; }
       .col-fixed-2 { left: 48px; width: 52px; min-width: 52px; }
@@ -308,6 +304,9 @@
   <script>
     const APP_PIN = "1234";
 
+    // 🔴 중요: 배포한 구글 웹 앱 URL을 아래 따옴표 안에 넣어주세요!
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxxTKI71ovSM8mDFKp0X-pRxv78ASmz5X842HxfKjVsPJJgYGJtucEOgmh1pgxvSCOV/exec";
+
     var globalData = null;
     var currentRecFilter = 'all';
     var profileSortMode = 'default';
@@ -341,19 +340,39 @@
     }
 
     function fetchData() {
-      google.script.run
-        .withSuccessHandler(onDataLoaded)
-        .withFailureHandler(function(err) {
-          document.getElementById('loading').innerHTML = '데이터 로딩 실패: ' + err.message;
-        })
-        .getDashboardData();
+      var loadingEl = document.getElementById('loading');
+      loadingEl.style.display = 'block';
+      loadingEl.innerHTML = '<div class="spinner"></div>시트 데이터를 분석하는 중...';
+
+      // 타임스탬프 파라미터로 모바일 캐시 방지 및 리다이렉트 추적
+      fetch(GAS_API_URL + "?t=" + new Date().getTime(), {
+        method: "GET",
+        redirect: "follow"
+      })
+      .then(function(res) {
+        if (!res.ok) throw new Error("서버 응답 오류 (HTTP " + res.status + ")");
+        return res.json();
+      })
+      .then(function(data) {
+        if (data.error) throw new Error(data.message);
+        onDataLoaded(data);
+      })
+      .catch(function(err) {
+        console.error(err);
+        loadingEl.innerHTML = 
+          '<div style="color:var(--red); padding:20px;">' +
+          '⚠️ 데이터 로딩 실패<br><br>' +
+          '<small style="color:var(--text-sub);">' + err.message + '</small><br><br>' +
+          '<button class="switch-mode-btn" style="margin:0 auto;" onclick="fetchData()">다시 시도</button>' +
+          '</div>';
+      });
     }
 
     function onDataLoaded(data) {
       globalData = data;
       document.getElementById('loading').style.display = 'none';
       document.getElementById('app').style.display = 'block';
-      document.getElementById('updated-at').innerText = '기준: ' + data.updatedAt;
+      document.getElementById('updated-at').innerText = '기준: ' + (data.updatedAt || '-');
 
       renderTabDash();
       renderTabRec();
@@ -417,12 +436,11 @@
       document.getElementById('matrix-body').innerHTML = bHtml;
     }
 
-    // 모드 2: 숙소 기준 타임라인 뷰 (상단 3개 행 고정)
+    // 모드 2: 숙소 기준 타임라인 뷰
     function renderTransposedDash() {
       var m = globalData.matrixData;
       if (!m || !m.rows || m.rows.length === 0) return;
 
-      // 1행: 헤더 날짜/요일 (top: 0 고정)
       var hHtml = '<tr><th class="col-fixed-trans">숙소 목록</th>';
       m.rows.forEach(function(r) {
         var dayCls = (r.weekday === '토') ? 'day-sat' : ((r.weekday === '일') ? 'day-sun' : '');
@@ -433,21 +451,18 @@
 
       var bHtml = '';
 
-      // 2행: 시장 마감률 (top: 34px 고정)
       bHtml += '<tr class="row-sticky-market"><td class="col-fixed-trans" style="color:var(--yellow);">📈 시장마감</td>';
       m.rows.forEach(function(r) {
         bHtml += '<td class="col-day-trans"><div style="color:var(--yellow);font-weight:700;">' + r.marketRate + '%</div><div style="font-size:0.6rem;color:var(--text-sub);">' + r.marketCount + '</div></td>';
       });
       bHtml += '</tr>';
 
-      // 3행: ★ 내 숙소 (top: 68px 고정)
       bHtml += '<tr class="row-sticky-my"><td class="col-fixed-trans is-my">★ ' + m.myRoomTitle + '</td>';
       m.rows.forEach(function(r) {
         bHtml += '<td class="col-day-trans">' + makeCellContent(r.myRoom) + '</td>';
       });
       bHtml += '</tr>';
 
-      // 4행부터: 경쟁사들 (스크롤 시 위 3개 행 아래로 미끄러져 들어감)
       m.compTitles.forEach(function(title, cIdx) {
         bHtml += '<tr><td class="col-fixed-trans">' + title + '</td>';
         m.rows.forEach(function(r) {
@@ -461,8 +476,8 @@
 
     function makeCellContent(room) {
       if (!room) return '-';
-      var s = room.status;
-      var p = room.price;
+      var s = String(room.status || '-');
+      var p = room.price || '-';
       var bCls = 'status-booked';
       if (s.indexOf('공실') !== -1) bCls = 'status-vacant';
       else if (s.indexOf('마감') !== -1) bCls = 'status-closed';
@@ -476,12 +491,12 @@
 
     // 2. 가격 추천 탭
     function renderTabRec() {
-      if (globalData.myProfile) {
+      if (globalData.myProfile && globalData.marketAvg) {
         var p = globalData.myProfile;
         var m = globalData.marketAvg;
-        setKpi('kpi-30', 'diff-30', p.mOcc, m.mOcc);
-        setKpi('kpi-wknd', 'diff-wknd', p.mWeekendOcc, m.mWeekendOcc);
-        setKpi('kpi-60', 'diff-60', p.occ60, m.occ60);
+        setKpi('kpi-30', 'diff-30', Number(p.mOcc || 0), Number(m.mOcc || 0));
+        setKpi('kpi-wknd', 'diff-wknd', Number(p.mWeekendOcc || 0), Number(m.mWeekendOcc || 0));
+        setKpi('kpi-60', 'diff-60', Number(p.occ60 || 0), Number(m.occ60 || 0));
       }
 
       if (globalData.urgentActions && globalData.urgentActions.length > 0) {
@@ -489,7 +504,7 @@
         var uHtml = '';
         globalData.urgentActions.forEach(function(it) {
           uHtml += '<div class="action-item"><div class="action-top">' +
-            '<span>[' + it.dDay + '] ' + it.date.substring(5) + '(' + it.weekday + ')</span>' +
+            '<span>[' + it.dDay + '] ' + String(it.date).substring(5) + '(' + it.weekday + ')</span>' +
             '<span class="action-price">' + fmtPrice(it.suggestedPrice) + '</span></div>' +
             '<div class="action-desc">' + it.diagnosis + '</div></div>';
         });
@@ -522,7 +537,7 @@
       var cont = document.getElementById('daily-rec-container');
       var list = globalData.dailyRecs || [];
       var filtered = list.filter(function(d) {
-        if (currentRecFilter === 'vacant') return d.myStatus.indexOf('공실') !== -1;
+        if (currentRecFilter === 'vacant') return String(d.myStatus).indexOf('공실') !== -1;
         if (currentRecFilter === 'weekend') return d.weekday === '금' || d.weekday === '토';
         return true;
       });
@@ -530,15 +545,16 @@
       var html = '';
       filtered.forEach(function(d) {
         var sCls = 'status-vacant';
-        if (d.myStatus.indexOf('마감') !== -1) sCls = 'status-closed';
-        else if (d.myStatus.indexOf('예약') !== -1) sCls = 'status-booked';
+        var myS = String(d.myStatus || '');
+        if (myS.indexOf('마감') !== -1) sCls = 'status-closed';
+        else if (myS.indexOf('예약') !== -1) sCls = 'status-booked';
 
-        var sugg = (d.myStatus.indexOf('공실') !== -1 && d.suggestedPrice !== '-')
+        var sugg = (myS.indexOf('공실') !== -1 && d.suggestedPrice !== '-')
           ? '➔ ' + fmtPrice(d.suggestedPrice) : '';
 
         html += '<div class="daily-row">' +
-          '<div class="date-col"><div class="date-main">' + d.date.substring(5) + ' <small>(' + d.weekday + ')</small></div><div class="date-sub">' + d.dDay + '</div></div>' +
-          '<div class="status-badge ' + sCls + '">' + d.myStatus + '</div>' +
+          '<div class="date-col"><div class="date-main">' + String(d.date).substring(5) + ' <small>(' + d.weekday + ')</small></div><div class="date-sub">' + d.dDay + '</div></div>' +
+          '<div class="status-badge ' + sCls + '">' + myS + '</div>' +
           '<div class="price-col"><div class="price-curr">' + fmtPrice(d.myPrice) + '</div><div class="price-sugg">' + sugg + '</div></div>' +
           '<div class="market-col">' + d.marketRate + '%</div></div>';
       });
@@ -563,7 +579,7 @@
       var comps = list.filter(function(p) { return !p.isMyRoom; });
 
       if (profileSortMode === 'occ') {
-        comps.sort(function(a, b) { return b.mOcc - a.mOcc; });
+        comps.sort(function(a, b) { return Number(b.mOcc || 0) - Number(a.mOcc || 0); });
       } else if (profileSortMode === 'price') {
         comps.sort(function(a, b) {
           var pA = parseInt(String(a.weekdayPrice).replace(/[^\d]/g, ''), 10) || 0;
@@ -581,6 +597,13 @@
         var badgeCls = isMy ? 'p-badge badge-my' : 'p-badge badge-comp';
         var badgeText = isMy ? '★ 내 숙소' : (p.category || '경쟁사');
         var airbnbUrl = p.roomId ? 'https://www.airbnb.co.kr/rooms/' + p.roomId : '#';
+
+        var mOccVal = Number(p.mOcc || 0);
+        var occ60Val = Number(p.occ60 || 0);
+        var mWkndVal = Number(p.mWeekendOcc || 0);
+        var wknd60Val = Number(p.weekendOcc60 || 0);
+        var mWkdayVal = Number(p.mWeekdayOcc || 0);
+        var wkday60Val = Number(p.weekdayOcc60 || 0);
 
         html += '<div class="' + cardCls + '">' +
           '<div class="p-header">' +
@@ -603,9 +626,9 @@
           '<table class="p-matrix">' +
             '<thead><tr><th style="width:34%;">구분</th><th style="width:33%;">1개월 (30일)</th><th style="width:33%;">전체 (60일)</th></tr></thead>' +
             '<tbody>' +
-              '<tr><td><strong>종합 점유율</strong></td><td><span class="' + getOccClass(p.mOcc) + '">' + p.mOcc.toFixed(1) + '%</span></td><td><span class="' + getOccClass(p.occ60) + '">' + p.occ60.toFixed(1) + '%</span></td></tr>' +
-              '<tr><td>주말 점유율</td><td>' + p.mWeekendOcc.toFixed(0) + '%</td><td>' + p.weekendOcc60.toFixed(0) + '%</td></tr>' +
-              '<tr><td>평일 점유율</td><td>' + p.mWeekdayOcc.toFixed(0) + '%</td><td>' + p.weekdayOcc60.toFixed(0) + '%</td></tr>' +
+              '<tr><td><strong>종합 점유율</strong></td><td><span class="' + getOccClass(mOccVal) + '">' + mOccVal.toFixed(1) + '%</span></td><td><span class="' + getOccClass(occ60Val) + '">' + occ60Val.toFixed(1) + '%</span></td></tr>' +
+              '<tr><td>주말 점유율</td><td>' + mWkndVal.toFixed(0) + '%</td><td>' + wknd60Val.toFixed(0) + '%</td></tr>' +
+              '<tr><td>평일 점유율</td><td>' + mWkdayVal.toFixed(0) + '%</td><td>' + wkday60Val.toFixed(0) + '%</td></tr>' +
             '</tbody>' +
           '</table>' +
         '</div>';
