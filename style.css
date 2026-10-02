@@ -84,32 +84,11 @@ body {
   margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; 
 }
 
-/* 점유율 KPI */
-.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.kpi-box { 
-  background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); 
-  border-radius: 8px; padding: 8px 4px; text-align: center; 
-}
-.kpi-box .label { font-size: 0.65rem; color: var(--text-sub); margin-bottom: 2px; }
-.kpi-box .val { font-size: 1rem; font-weight: 700; }
-.kpi-box .diff { font-size: 0.65rem; font-weight: 600; margin-top: 2px; }
-.plus { color: var(--green); }
-.minus { color: var(--red); }
-
-/* 긴급 조정 배너 */
-.action-item { 
-  background: rgba(244,63,94,0.08); border-left: 3px solid var(--red); 
-  padding: 10px; border-radius: 6px; margin-bottom: 6px; font-size: 0.8rem; 
-}
-.action-top { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 2px; }
-.action-price { color: var(--red); font-weight: 700; }
-.action-desc { font-size: 0.72rem; color: var(--text-sub); }
-
 /* 버튼류 */
-.filter-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.filter-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
 .filter-btn { 
-  flex: 1; padding: 7px; font-size: 0.75rem; border-radius: 6px; 
-  border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-sub); cursor: pointer; 
+  flex: 1; padding: 8px 4px; font-size: 0.72rem; border-radius: 6px; 
+  border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-sub); cursor: pointer; text-align: center;
 }
 .filter-btn.active { background: var(--accent); color: #000; font-weight: 700; border-color: var(--accent); }
 .switch-mode-btn { 
@@ -118,21 +97,9 @@ body {
   font-size: 0.72rem; cursor: pointer; display: flex; align-items: center; gap: 4px; 
 }
 
-/* 리스트 뷰 */
-.daily-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.date-col { width: 64px; }
-.date-main { font-size: 0.85rem; font-weight: 700; }
-.date-sub { font-size: 0.68rem; color: var(--text-sub); }
-.status-badge { padding: 3px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-align: center; }
-.status-vacant { background: rgba(16,185,129,0.15); color: var(--green); }
-.status-booked { background: rgba(148,163,184,0.15); color: var(--text-sub); }
-.status-closed { background: rgba(59,130,246,0.15); color: var(--blue); }
-.price-col { text-align: right; flex: 1; padding-right: 8px; }
-.price-curr { font-size: 0.85rem; font-weight: 700; }
-.price-sugg { font-size: 0.7rem; color: var(--accent); }
-.market-col { width: 40px; text-align: right; font-size: 0.75rem; font-weight: 600; color: var(--yellow); }
-
-/* 대시보드 매트릭스 테이블 & 2D Sticky */
+/* ----------------------------------------------------
+   대시보드 매트릭스 테이블 & 2D Sticky 레이아웃
+   ---------------------------------------------------- */
 .matrix-wrapper {
   position: relative; overflow-x: auto; overflow-y: auto;
   max-height: calc(100vh - 145px); -webkit-overflow-scrolling: touch;
@@ -146,7 +113,7 @@ body {
 }
 .matrix-table thead th { position: sticky; top: 0; background: #192338; z-index: 20; font-weight: 600; height: 34px; }
 
-/* [기본 뷰] 좌측 3열 고정 (모바일 최적화) */
+/* [기본 뷰] 좌측 3열 고정 */
 .col-fixed-1 { position: sticky; left: 0; width: 41px; min-width: 41px; max-width: 41px; background: #121929; z-index: 10; font-size: 0.68rem; padding: 6px 1px !important; }
 .col-fixed-2 { position: sticky; left: 41px; width: 46px; min-width: 46px; background: #121929; z-index: 10; }
 .col-fixed-3 { position: sticky; left: 87px; width: 68px; min-width: 68px; background: #16243d; border-right: 2px solid var(--accent) !important; box-shadow: 3px 0 8px rgba(0,0,0,0.5); z-index: 10; }
@@ -164,7 +131,6 @@ thead th.col-fixed-3 { z-index: 30; background: #203152; color: var(--accent); }
 }
 .col-fixed-trans.is-my { background: #16243d; color: var(--accent); }
 
-/* [타임라인 뷰] 세로 스크롤 시 상단 3개 행 고정 */
 .row-sticky-market td { position: sticky; top: 34px; background: #172033; z-index: 20; height: 34px; }
 .row-sticky-market td.col-fixed-trans { z-index: 35; background: #192338; top: 34px; }
 
@@ -194,29 +160,37 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 .day-sat { color: var(--blue); }
 .day-sun { color: var(--red); }
 
+/* 상태 뱃지 색상 */
+.status-vacant { background: rgba(16,185,129,0.15); color: var(--green); }
+.status-booked { background: rgba(148,163,184,0.15); color: var(--text-sub); }
+.status-closed { background: rgba(59,130,246,0.15); color: var(--blue); }
+.badge-down { background: rgba(244, 63, 94, 0.2) !important; color: #ff6b81 !important; border: 1px solid rgba(244, 63, 94, 0.4); }
+.badge-up { background: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); }
+
+/* 구글 시트 메모(Note) 표식 및 팝업 툴팁 */
+.cell-box.has-note { position: relative; cursor: pointer; }
+.cell-box.has-note::after {
+  content: ''; position: absolute; top: 1px; right: 1px; width: 0; height: 0;
+  border-top: 5px solid var(--accent); border-left: 5px solid transparent;
+}
+.note-tooltip {
+  display: none; position: fixed; background: #1e293b; color: #f1f5f9;
+  border: 1px solid var(--accent); border-radius: 6px; padding: 8px 10px;
+  font-size: 0.72rem; line-height: 1.45; white-space: pre-wrap; text-align: left;
+  z-index: 9999; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); max-width: 240px; pointer-events: none;
+}
+
 /* 숙소 클릭 인터랙션 & 프로필 하이라이트 효과 */
-.room-clickable {
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
-.room-clickable:active {
-  opacity: 0.6;
-}
+.room-clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.room-clickable:active { opacity: 0.6; }
 @keyframes card-highlight {
   0% { transform: scale(1.02); box-shadow: 0 0 16px var(--accent); border-color: var(--accent); }
   100% { transform: scale(1); box-shadow: none; }
 }
-.p-card.highlight-target {
-  animation: card-highlight 1.5s ease-out;
-}
+.p-card.highlight-target { animation: card-highlight 1.5s ease-out; }
 
 /* 프로필 카드 스타일 */
-.p-card { 
-  background: var(--card-bg); border: 1px solid var(--card-border); 
-  border-radius: 12px; padding: 14px; margin-bottom: 12px; 
-  transition: all 0.2s ease; 
-}
+.p-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin-bottom: 12px; transition: all 0.2s ease; }
 .p-card.is-my { border: 2px solid var(--accent); background: rgba(56,189,248,0.03); }
 .p-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
 .p-title-link { font-size: 0.95rem; font-weight: 700; color: #fff; text-decoration: none; }
@@ -233,6 +207,111 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 .occ-mid { color: var(--yellow); font-weight: 700; }
 .occ-low { color: var(--red); font-weight: 700; }
 
+/* ----------------------------------------------------
+   가격추천 탭 전용 레이아웃 (스크린샷 색감 & 가시성 반영)
+   ---------------------------------------------------- */
+.kpi-grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
+.kpi-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px 8px; text-align: center; }
+.kpi-title { font-size: 0.68rem; color: var(--text-sub); margin-bottom: 4px; }
+.kpi-num { font-size: 1.2rem; font-weight: 800; line-height: 1.2; }
+.kpi-sub { font-size: 0.65rem; font-weight: 600; margin-top: 3px; }
+
+/* KPI 개별 포인트 컬러 */
+.kpi-red .kpi-num, .kpi-red .kpi-sub { color: var(--red) !important; }
+.kpi-green .kpi-num, .kpi-green .kpi-sub { color: var(--green) !important; }
+.kpi-blue .kpi-num, .kpi-blue .kpi-sub { color: var(--blue) !important; }
+.kpi-accent .kpi-num, .kpi-accent .kpi-sub { color: var(--accent) !important; }
+
+/* 권장 조치 헤더 */
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.section-title { font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
+.btn-airbnb-main {
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
+  background: rgba(56, 189, 248, 0.12); border: 1px solid var(--accent);
+  border-radius: 6px; color: var(--accent); font-size: 0.72rem; font-weight: 700; text-decoration: none;
+}
+.btn-airbnb-main:active { background: var(--accent); color: #000; }
+.section-desc { font-size: 0.72rem; color: var(--text-sub); margin-bottom: 12px; }
+
+/* 권장 조치 카드 (Top 3) */
+.action-summary-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.action-card {
+  background: var(--card-bg); border-radius: 12px; padding: 12px 14px;
+  border: 1px solid var(--card-border); position: relative; border-left-width: 4px;
+}
+.action-card.urgent { border-left-color: var(--red); background: rgba(244, 63, 94, 0.05); }
+.action-card.opportunity { border-left-color: var(--green); background: rgba(16, 185, 129, 0.05); }
+.action-card.warning { border-left-color: var(--yellow); background: rgba(245, 158, 11, 0.05); }
+
+.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.date-badge { font-size: 0.9rem; font-weight: 700; color: #fff; }
+.date-badge small { font-size: 0.72rem; font-weight: normal; color: var(--text-sub); margin-left: 4px; }
+.tag { font-size: 0.65rem; font-weight: 700; padding: 3px 7px; border-radius: 4px; }
+.tag-red { background: rgba(244,63,94,0.18); color: var(--red); }
+.tag-green { background: rgba(16,185,129,0.18); color: var(--green); }
+.tag-yellow { background: rgba(245,158,11,0.18); color: var(--yellow); }
+
+.price-compare { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.price-curr { font-size: 0.82rem; color: var(--text-sub); text-decoration: line-through; }
+.price-target { font-size: 1.15rem; font-weight: 800; }
+.price-target.down { color: var(--red); }
+.price-target.up { color: var(--green); }
+.price-target.yellow { color: var(--yellow); }
+.diff-badge { font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.diff-down { background: rgba(244,63,94,0.15); color: var(--red); }
+.diff-up { background: rgba(16,185,129,0.15); color: var(--green); }
+.diff-yellow { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+.guide-text { font-size: 0.74rem; color: #cbd5e1; line-height: 1.45; background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 6px; }
+
+/* 60일 리스트 카드 */
+.list-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; }
+.daily-item {
+  padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.daily-item:last-child { border-bottom: none; }
+
+.daily-main-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.date-box {
+  width: 58px; min-width: 58px; background: rgba(255,255,255,0.03);
+  border: 1px solid var(--card-border); border-radius: 6px; padding: 5px 2px;
+  text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.date-box .d-day-num { font-size: 0.8rem; font-weight: 700; line-height: 1.1; }
+.date-box .d-day-sub { font-size: 0.62rem; font-weight: 600; margin-top: 2px; }
+
+.diag-box { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.badge-vacant { background: rgba(16,185,129,0.15); color: var(--green); font-size: 0.65rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; }
+.badge-booked { background: rgba(148,163,184,0.15); color: var(--text-sub); font-size: 0.65rem; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+.d-diag-text { font-size: 0.74rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+.price-box { text-align: right; min-width: 76px; }
+.d-curr-price { font-size: 0.88rem; font-weight: 700; }
+.d-sugg-price { font-size: 0.74rem; font-weight: 700; }
+.d-sugg-down { color: var(--red) !important; }
+.d-sugg-up { color: var(--green) !important; }
+.d-market-rate { font-size: 0.63rem; color: var(--yellow); }
+
+.comp-scroll-wrapper {
+  display: flex; align-items: center; gap: 6px; overflow-x: auto;
+  padding: 2px 0; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.comp-scroll-wrapper::-webkit-scrollbar { display: none; }
+.comp-scroll-label { font-size: 0.62rem; color: var(--text-sub); white-space: nowrap; padding-right: 2px; }
+
+.comp-chip {
+  flex: 0 0 auto; background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px;
+  padding: 4px 8px; display: flex; flex-direction: column; gap: 1px;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.comp-chip:active { background: rgba(56, 189, 248, 0.15); border-color: var(--accent); }
+.chip-name { font-size: 0.65rem; color: #e2e8f0; font-weight: 600; max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-price { font-size: 0.68rem; color: var(--accent); font-weight: 700; }
+.chip-none { font-size: 0.68rem; color: var(--text-sub); font-style: italic; }
+
 /* 진단 리포트 */
 .audit-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 6px; }
 .audit-table th, .audit-table td { padding: 6px; border: 1px solid var(--card-border); text-align: left; }
@@ -242,55 +321,41 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 .spinner { width: 34px; height: 34px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-
-
-
-/* ----------------------------------------------------
-   스프레드시트 메모(Note) 팝업 & 인하/인상 뱃지 디자인
-   ---------------------------------------------------- */
-/* 가격 변동 시 뱃지 색상 */
-.badge-down {
-  background: rgba(244, 63, 94, 0.2) !important;
-  color: #ff6b81 !important;
-  border: 1px solid rgba(244, 63, 94, 0.4);
-}
-.badge-up {
-  background: rgba(59, 130, 246, 0.2) !important;
-  color: #60a5fa !important;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+/* 마감된 행 전체 톤다운 및 불투명도 처리 */
+.daily-item.is-booked-row {
+  opacity: 0.6;
+  background: rgba(0, 0, 0, 0.15);
 }
 
-/* 메모가 있는 셀 표시 (구글 시트처럼 우측 상단 작은 삼각형 표시) */
-.cell-box.has-note {
-  position: relative;
-  cursor: pointer;
-}
-.cell-box.has-note::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 0;
-  height: 0;
-  border-top: 5px solid var(--accent);
-  border-left: 5px solid transparent;
-}
+/* 마감 상태일 때의 차분한 저채도 요일 컬러 */
+.day-sat-muted { color: #5a7b9d !important; }
+.day-sun-muted { color: #9c5b65 !important; }
+.day-normal-muted { color: #64748b !important; }
 
-/* 툴팁 기본 위치 */
-.note-tooltip {
-  display: none;
-  position: fixed;
-  background: #1e293b;
-  color: #f1f5f9;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  text-align: left;
-  z-index: 9999;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  max-width: 240px;
-  pointer-events: none;
+/* 공실일 때의 선명한 요일 컬러 */
+.day-sat-vivid { color: #38bdf8 !important; }
+.day-sun-vivid { color: #f43f5e !important; }
+.day-normal-vivid { color: #ffffff !important; }
+
+
+
+
+/* 네이버 지도 연동 주소 링크 스타일 */
+.map-link {
+  color: var(--text-sub);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.4);
+  padding-bottom: 1px;
+}
+.map-link:active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.map-icon {
+  font-size: 0.7rem;
+  color: #03c75a; /* 네이버 고유 그린 컬러 */
+  font-weight: 700;
 }

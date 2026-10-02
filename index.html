@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>숙소 모니터링</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <!-- 외부 스타일시트 연결 -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,7 +34,17 @@
   <!-- 메인 앱 컨텐츠 -->
   <div id="app" style="display:none;">
     
-    <!-- 탭 1: 종합 대시보드 -->
+    <!-- 탭 1: 숙소 프로필 (맨 첫 번째) -->
+    <div id="tab-prof" class="tab-content">
+      <div class="filter-tabs" style="margin-bottom:12px;">
+        <button class="filter-btn active" onclick="sortProfiles('default', this)">기본 정렬</button>
+        <button class="filter-btn" onclick="sortProfiles('occ', this)">점유율 높은순</button>
+        <button class="filter-btn" onclick="sortProfiles('price', this)">평일요금 낮은순</button>
+      </div>
+      <div id="profiles-container"></div>
+    </div>
+
+    <!-- 탭 2: 종합 대시보드 -->
     <div id="tab-dash" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <span id="matrix-guide-text" style="font-size:0.73rem; color:var(--text-sub);">날짜(세로) 뷰 (3열 고정)</span>
@@ -51,53 +60,60 @@
       </div>
     </div>
 
-    <!-- 탭 2: 가격 추천 & 진단 -->
+    <!-- 탭 3: 가격 추천 & 액션 보드 (개편) -->
     <div id="tab-rec" class="tab-content">
-      <div class="card">
-        <div class="card-title">점유율 비교 (내 숙소 vs 시장 평균)</div>
-        <div class="kpi-grid">
-          <div class="kpi-box">
-            <div class="label">30일 전체</div>
-            <div class="val" id="kpi-30">-</div>
-            <div class="diff" id="diff-30">-</div>
-          </div>
-          <div class="kpi-box">
-            <div class="label">30일 주말</div>
-            <div class="val" id="kpi-wknd">-</div>
-            <div class="diff" id="diff-wknd">-</div>
-          </div>
-          <div class="kpi-box">
-            <div class="label">60일 전체</div>
-            <div class="val" id="kpi-60">-</div>
-            <div class="diff" id="diff-60">-</div>
-          </div>
+        <!-- 1. 2x2 실무형 KPI 바 (스크린샷 색감 매핑) -->
+      <div class="kpi-grid-4">
+        <div class="kpi-card kpi-red">
+          <div class="kpi-title">D-7 이내 미판매</div>
+          <div class="kpi-num" id="kpi-d7">-</div>
+          <div class="kpi-sub">공실 방어 요망</div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-title">30일 평일 점유율</div>
+          <div class="kpi-num" id="kpi-wkday">-</div>
+          <div class="kpi-sub" id="diff-wkday">-</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-title">30일 주말 점유율</div>
+          <div class="kpi-num" id="kpi-wknd">-</div>
+          <div class="kpi-sub" id="diff-wknd">-</div>
+        </div>
+        <div class="kpi-card kpi-accent">
+          <div class="kpi-title">60일 전체 점유율</div>
+          <div class="kpi-num" id="kpi-60">-</div>
+          <div class="kpi-sub" id="diff-60">-</div>
         </div>
       </div>
 
-      <div class="card" id="urgent-card" style="display:none;">
-        <div class="card-title" style="color:var(--red);">🚨 긴급 가격 조정 알림</div>
-        <div id="urgent-list"></div>
+      <!-- 2. 오늘의 권장 조치 카드 (헤더 우측에 호스트 달력 버튼 배치) -->
+      <div class="section-header">
+        <div class="section-title">
+          <span>⚡ 오늘의 권장 조치</span>
+          <span style="font-size:0.7rem; color:var(--accent); font-weight:normal;">(Top 3)</span>
+        </div>
+        <a href="https://www.airbnb.co.kr/hosting/calendar" target="_blank" class="btn-airbnb-main">
+          호스트 달력 열기 ↗
+        </a>
+      </div>
+      <div class="section-desc">시장 상황을 반영하여 아래 추천 요금으로 에어비앤비 달력을 조정하세요.</div>
+
+      <div class="action-summary-container" id="urgent-list"></div>
+
+      <!-- 3. 60일 전체 진단 & 경쟁사 공실 현황 -->
+      <div class="section-title" style="margin-bottom:10px;">
+        <span>📅 60일 전체 진단 & 경쟁사 공실 현황</span>
       </div>
 
+      <!-- 4개 필터 탭 -->
       <div class="filter-tabs">
-        <button class="filter-btn active" onclick="setRecFilter('all', this)">전체</button>
-        <button class="filter-btn" onclick="setRecFilter('vacant', this)">공실만</button>
+        <button class="filter-btn active" onclick="setRecFilter('all', this)">전체(60일)</button>
+        <button class="filter-btn" onclick="setRecFilter('my_vacant', this)">내 공실만</button>
+        <button class="filter-btn" onclick="setRecFilter('weekday', this)">평일만</button>
         <button class="filter-btn" onclick="setRecFilter('weekend', this)">주말만</button>
       </div>
 
-      <div class="card" style="padding: 4px 10px;">
-        <div id="daily-rec-container"></div>
-      </div>
-    </div>
-
-    <!-- 탭 3: 숙소 프로필 -->
-    <div id="tab-prof" class="tab-content">
-      <div class="filter-tabs" style="margin-bottom:12px;">
-        <button class="filter-btn active" onclick="sortProfiles('default', this)">기본 정렬</button>
-        <button class="filter-btn" onclick="sortProfiles('occ', this)">점유율 높은순</button>
-        <button class="filter-btn" onclick="sortProfiles('price', this)">평일요금 낮은순</button>
-      </div>
-      <div id="profiles-container"></div>
+      <div class="list-card" id="daily-rec-container"></div>
     </div>
 
     <!-- 탭 4: 숙소 진단 리포트 -->
@@ -107,7 +123,7 @@
 
   </div>
 
-<!-- 하단 탭 바 -->
+  <!-- 하단 탭 바 (숙소프로필 맨 앞) -->
   <div class="tab-bar">
     <div class="tab-item" onclick="switchTab('prof', this)">
       <div class="icon">🏨</div>
@@ -127,7 +143,6 @@
     </div>
   </div>
 
-  <!-- 외부 자바스크립트 연결 -->
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
-// 🔑 비밀번호 7979로 설정
+// 🔑 비밀번호 7979
 const APP_PIN = "7979";
 
-// 연동된 구글 웹 앱 URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz7j5nskLw2d6B4o39eldVbDHa_6fTSdVSNOQliiXP06GkmXH4kb2KoayjUcB35XO4v/exec";
+// 새로 배포한 웹 앱 URL을 입력하세요.
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxNDr1gsZLOdxmIbrQLW8kQ4Y4G7RiTpNbIPBiQF8nX5cgkRoudVHa8711J6U-x1ud1/exec";
 
 var globalData = null;
 var currentRecFilter = 'all';
@@ -39,9 +39,8 @@ function unlockApp() {
 function fetchData() {
   var loadingEl = document.getElementById('loading');
   loadingEl.style.display = 'block';
-  loadingEl.innerHTML = '<div class="spinner"></div>시트 데이터를 분석하는 중...';
+  loadingEl.innerHTML = '<div class="spinner"></div>시트 원본 데이터를 수신하는 중...';
 
-  // 타임스탬프 파라미터로 모바일 브라우저 캐시 방지
   fetch(GAS_API_URL + "?t=" + new Date().getTime(), {
     method: "GET",
     redirect: "follow"
@@ -52,7 +51,18 @@ function fetchData() {
   })
   .then(function(data) {
     if (data.error) throw new Error(data.message);
-    onDataLoaded(data);
+
+    // 💡 [핵심] 가공되지 않은 순수 원본 2차원 배열을 브라우저에서 직접 빌드
+    globalData = parseRawSheetsData(data);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('updated-at').innerText = '기준: ' + (globalData.updatedAt || '-');
+
+    renderTabProf();
+    renderTabDash();
+    renderTabRec();
+    renderTabAudit();
   })
   .catch(function(err) {
     console.error(err);
@@ -65,16 +75,270 @@ function fetchData() {
   });
 }
 
-function onDataLoaded(data) {
-  globalData = data;
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('updated-at').innerText = '기준: ' + (data.updatedAt || '-');
+// ----------------------------------------------------
+// 원본 2차원 시트 배열을 무손실로 앱 데이터로 조립하는 파서
+// ----------------------------------------------------
+function parseRawSheetsData(res) {
+  var raw = res.raw || {};
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  renderTabDash();
-  renderTabRec();
-  renderTabProf();
-  renderTabAudit();
+  // 1. 숙소 프로필 파싱 (숙소 프로필 시트 원본)
+  var pSheet = raw.profile || [];
+  var profiles = [];
+  var myProfile = null;
+
+  for (var pi = 1; pi < pSheet.length; pi++) {
+    var pRow = pSheet[pi];
+    if (!pRow[1] && !pRow[2]) continue;
+
+    var parsePct = function(v) {
+      var n = parseFloat(v) || 0;
+      return n <= 1 && n > 0 ? n * 100 : n;
+    };
+
+    var cat = String(pRow[0] || '').trim();
+    var tit = String(pRow[2] || '').trim();
+    var isMy = cat.indexOf('내 숙소') !== -1 || cat.indexOf('내숙소') !== -1 || tit.indexOf('★내') !== -1 || pi === 1;
+
+    var profObj = {
+      category: cat,
+      roomId: String(pRow[1] || '').trim(),
+      title: tit,
+      address: String(pRow[3] || '').trim(),
+      spec: String(pRow[4] || '').trim(),
+      rating: pRow[5] || '-',
+      reviews: pRow[6] || 0,
+      weekdayPrice: pRow[7] || 0,
+      weekendPrice: pRow[8] || 0,
+      extraPolicy: String(pRow[9] || '-'),
+      mOcc: parsePct(pRow[10]),
+      mWeekendOcc: parsePct(pRow[11]),
+      mWeekdayOcc: parsePct(pRow[12]),
+      occ60: parsePct(pRow[13]),
+      weekendOcc60: parsePct(pRow[14]),
+      weekdayOcc60: parsePct(pRow[15]),
+      isMyRoom: isMy
+    };
+
+    if (isMy && !myProfile) {
+      myProfile = profObj;
+    } else {
+      profiles.push(profObj);
+    }
+  }
+
+  // 시장 평균 계산
+  var marketAvg = { mOcc: 0, mWeekendOcc: 0, mWeekdayOcc: 0, occ60: 0 };
+  if (profiles.length > 0) {
+    var sMOcc = 0, sMWknd = 0, sMWkday = 0, s60 = 0;
+    profiles.forEach(function(p) {
+      sMOcc += p.mOcc;
+      sMWknd += p.mWeekendOcc;
+      sMWkday += p.mWeekdayOcc;
+      s60 += p.occ60;
+    });
+    marketAvg.mOcc = (sMOcc / profiles.length).toFixed(1);
+    marketAvg.mWeekendOcc = (sMWknd / profiles.length).toFixed(1);
+    marketAvg.mWeekdayOcc = (sMWkday / profiles.length).toFixed(1);
+    marketAvg.occ60 = (s60 / profiles.length).toFixed(1);
+  }
+
+  // 2. 종합 대시보드 원본 파싱 & 시장 마감률 자체 정밀 계산
+  var dSheet = raw.dashboard || [];
+  var dNotes = raw.dashboardNotes || [];
+  var matrixData = { myRoomTitle: '내 숙소', compTitles: [], rows: [] };
+
+  var headerRowIdx = 0;
+  for (var hi = 0; hi < Math.min(4, dSheet.length); hi++) {
+    if (String(dSheet[hi][0]).indexOf('날짜') !== -1) {
+      headerRowIdx = hi;
+      break;
+    }
+  }
+
+  var hRow = dSheet[headerRowIdx] || [];
+  var roomMeta = [];
+
+  for (var c = 6; c < hRow.length; c += 2) {
+    var fullTitle = String(hRow[c] || '').trim();
+    if (!fullTitle) continue;
+
+    var isMyRoom = fullTitle.indexOf('★내숙소') !== -1 || fullTitle.indexOf('★내 숙소') !== -1;
+    var cleanTitle = fullTitle
+      .replace(/\[★내숙소\]\s*/g, '')
+      .replace(/\[★내 숙소\]\s*/g, '')
+      .replace(/\s*상태\s*$/g, '')
+      .replace(/^\[|\]$/g, '');
+
+    if (cleanTitle.length > 7) cleanTitle = cleanTitle.substring(0, 7) + '..';
+
+    var rInfo = { title: cleanTitle, isMy: isMyRoom, sCol: c, pCol: c + 1 };
+    if (isMyRoom) {
+      matrixData.myRoomTitle = cleanTitle;
+      roomMeta.unshift(rInfo);
+    } else {
+      matrixData.compTitles.push(cleanTitle);
+      roomMeta.push(rInfo);
+    }
+  }
+
+  var totalRooms = roomMeta.length;
+
+  for (var ri = headerRowIdx + 1; ri < dSheet.length; ri++) {
+    var row = dSheet[ri];
+    var nRow = dNotes[ri] || [];
+    if (!row || !row[0]) continue;
+
+    var rawDateStr = String(row[0]).trim();
+    var mmdd = rawDateStr.length >= 10 ? rawDateStr.substring(5).replace('-', '/') : rawDateStr;
+
+    var myData = { status: '-', price: '-', note: '' };
+    var comps = [];
+    var bookedRooms = 0;
+
+    for (var k = 0; k < roomMeta.length; k++) {
+      var meta = roomMeta[k];
+      var sVal = String(row[meta.sCol] || '-').trim();
+      var pRaw = row[meta.pCol];
+      var pVal = formatCompactPrice(pRaw);
+      var noteVal = String(nRow[meta.pCol] || '').trim();
+
+      // 공실이 아니면 실제 마감으로 판정
+      var isClosed = (sVal !== '-' && sVal !== '미확인' && sVal.indexOf('공실') === -1);
+      if (isClosed) bookedRooms++;
+
+      var cellObj = { status: sVal, price: pVal, note: noteVal };
+      if (meta.isMy) {
+        myData = cellObj;
+      } else {
+        comps.push(cellObj);
+      }
+    }
+
+    var marketRateExact = totalRooms > 0 ? Math.round((bookedRooms / totalRooms) * 100) : 0;
+
+    matrixData.rows.push({
+      date: mmdd,
+      fullDate: rawDateStr,
+      weekday: String(row[1] || '').trim(),
+      marketRate: marketRateExact,
+      marketCount: bookedRooms + '/' + totalRooms,
+      myRoom: myData,
+      comps: comps
+    });
+  }
+
+// ----------------------------------------------------
+// 3. 가격 추천 & 진단 시트 원본 파싱 (인덱스 버그 수정)
+// ----------------------------------------------------
+  var recSheet = raw.recommendation || [];
+  var dailyRecs = [];
+  var urgentActions = [];
+
+  for (var rj = 1; rj < recSheet.length; rj++) {
+    var recRow = recSheet[rj];
+    if (!recRow || !recRow[0]) continue;
+
+    var dateStr = String(recRow[0]).trim();
+    var tDate = new Date(dateStr);
+    tDate.setHours(0, 0, 0, 0);
+
+    var diffDays = !isNaN(tDate.getTime()) ? Math.round((tDate - today) / (1000 * 60 * 60 * 24)) : 999;
+    var dDayStr = diffDays >= 0 ? 'D-' + diffDays : 'D+' + Math.abs(diffDays);
+
+    var mmddShort = dateStr.length >= 10 ? dateStr.substring(5).replace('-', '/') : dateStr;
+    var matchedM = matrixData.rows.find(function(mr) { return mr.date === mmddShort || mr.fullDate === dateStr; });
+
+    var realMarketRate = matchedM ? matchedM.marketRate : 0;
+    var myStatusStr = String(recRow[3] || '');
+    var myPriceVal = recRow[4] || '-';
+    var compAvgPrice = recRow[6] || '-';
+    
+    // 💡 [수정] 인덱스 교정: 10번이 '가격 진단 결과', 11번이 '권장 요금', 12번이 '추천 가이드'
+    var suggestedPrice = recRow[11] || '-';
+    var diagnosisStr = String(recRow[10] || '').trim();
+    var actionStr = String(recRow[12] || '').trim();
+
+    // 혹시 시트 열 구성이 달라 진단명이 숫자로 올 경우 기본 대체 텍스트 처리
+    if (!diagnosisStr || /^\d+$/.test(diagnosisStr)) {
+      diagnosisStr = (myStatusStr.indexOf('공실') !== -1) ? '적정 가격 유지' : '판매 완료';
+    }
+
+    var item = {
+      date: dateStr,
+      diffDays: diffDays,
+      dDay: dDayStr,
+      weekday: String(recRow[1] || ''),
+      myStatus: myStatusStr,
+      myPrice: myPriceVal,
+      marketRate: realMarketRate,
+      avgCompPrice: compAvgPrice,
+      suggestedPrice: suggestedPrice,
+      diagnosis: diagnosisStr,
+      action: actionStr
+    };
+
+    dailyRecs.push(item);
+
+    // 긴급 권장 조치 자동 판정 (내 숙소 공실 기준)
+    if (myStatusStr.indexOf('공실') !== -1) {
+      var numMyP = parseInt(String(myPriceVal).replace(/[^\d]/g, ''), 10) || 0;
+      var numAvgP = parseInt(String(compAvgPrice).replace(/[^\d]/g, ''), 10) || 0;
+
+      if (diffDays <= 3 && realMarketRate < 60) {
+        item.diagnosis = '직전 공실 위험 (수요 부진)';
+        var refP = numAvgP > 0 ? numAvgP : numMyP;
+        item.suggestedPrice = Math.max(Math.round((refP * 0.8) / 1000) * 1000, 50000);
+        item.action = '체크인 ' + dDayStr + ' 임박 및 시장 침체. 약 15~20% 할인으로 공실 손실 방어 권장';
+        urgentActions.push(item);
+      } else if (realMarketRate >= 70) {
+        item.diagnosis = '공급 부족 (수요 강세)';
+        item.suggestedPrice = Math.max(numMyP, numAvgP > 0 ? Math.round((numAvgP * 1.1) / 1000) * 1000 : numMyP);
+        item.action = '주변 숙소 마감률 ' + realMarketRate + '% 돌파! 잔여 객실 희소로 프리미엄 인상 권장';
+        urgentActions.push(item);
+      } else if (numAvgP > 0 && numMyP > numAvgP * 1.25) {
+        item.diagnosis = '주변 대비 고평가 (공실 우려)';
+        item.suggestedPrice = Math.round((numAvgP * 1.02) / 1000) * 1000;
+        item.action = '경쟁사 평균가보다 25% 이상 높아 예약 저항 가능성. 평균 수준으로 현실화 권장';
+        urgentActions.push(item);
+      }
+    }
+  }
+
+  urgentActions.sort(function(a, b) { return a.diffDays - b.diffDays; });
+
+  // 4. 숙소 진단 리포트 시트 원본 파싱
+  var aSheet = raw.audit || [];
+  var auditSections = [];
+  var curSec = null;
+
+  for (var ai = 0; ai < aSheet.length; ai++) {
+    var aRow = aSheet[ai];
+    var fCell = String(aRow[0] || '').trim();
+    if (!fCell && !aRow[1]) continue;
+
+    if (fCell.indexOf('[') === 0 || fCell.indexOf('■') === 0 || fCell.indexOf('▶') === 0) {
+      curSec = { title: fCell, rows: [] };
+      auditSections.push(curSec);
+    } else if (curSec) {
+      var clean = aRow.filter(function(c, idx) { return idx < 6; });
+      if (clean.some(function(v) { return v !== ''; })) {
+        curSec.rows.push(clean);
+      }
+    }
+  }
+
+  return {
+    updatedAt: res.updatedAt || '-',
+    myProfile: myProfile,
+    profiles: profiles,
+    marketAvg: marketAvg,
+    urgentActions: urgentActions,
+    dailyRecs: dailyRecs,
+    matrixData: matrixData,
+    auditSections: auditSections
+  };
 }
 
 function switchTab(tabId, el) {
@@ -85,6 +349,9 @@ function switchTab(tabId, el) {
   window.scrollTo(0, 0);
 }
 
+// ----------------------------------------------------
+// 대시보드 렌더링
+// ----------------------------------------------------
 function toggleMatrixMode() {
   isTransposedMode = !isTransposedMode;
   var guideText = document.getElementById('matrix-guide-text');
@@ -108,7 +375,6 @@ function renderTabDash() {
   }
 }
 
-// 모드 1: 기본 날짜 기준 뷰
 function renderStandardDash() {
   var m = globalData.matrixData;
   if (!m || !m.rows || m.rows.length === 0) return;
@@ -137,7 +403,6 @@ function renderStandardDash() {
   document.getElementById('matrix-body').innerHTML = bHtml;
 }
 
-// 모드 2: 숙소 기준 타임라인 뷰
 function renderTransposedDash() {
   var m = globalData.matrixData;
   if (!m || !m.rows || m.rows.length === 0) return;
@@ -184,19 +449,16 @@ function makeCellContent(room) {
   var bCls = 'status-booked';
   if (s.indexOf('공실') !== -1) {
     bCls = 'status-vacant';
-    // 가격 할인/인상 뱃지 색상 세분화
     if (s.indexOf('▼') !== -1) bCls += ' badge-down';
     else if (s.indexOf('▲') !== -1) bCls += ' badge-up';
   } else if (s.indexOf('마감') !== -1) {
     bCls = 'status-closed';
   }
 
-  // 텍스트 간소화 (예: '공실(▼1.5만)'은 그대로 살려 변동폭 노출)
   var shortStatus = s;
   if (s === '공실') shortStatus = '공실';
 
   var hasNoteCls = note ? ' has-note' : '';
-  // 메모가 있을 경우 data-note 속성에 저장
   var noteAttr = note ? ' data-note="' + encodeURIComponent(note) + '"' : '';
 
   return '<div class="cell-box' + hasNoteCls + '"' + noteAttr + '>' +
@@ -238,27 +500,35 @@ function goToProfile(target) {
   }, 120);
 }
 
-// 2. 가격 추천 탭
+// ----------------------------------------------------
+// 가격 추천 & 액션 보드 탭 렌더링
+// ----------------------------------------------------
+// ----------------------------------------------------
+// 가격 추천 & 액션 보드 탭 렌더링 (가시성 & 색상 강화)
+// ----------------------------------------------------
 function renderTabRec() {
   if (globalData.myProfile && globalData.marketAvg) {
     var p = globalData.myProfile;
     var m = globalData.marketAvg;
-    setKpi('kpi-30', 'diff-30', Number(p.mOcc || 0), Number(m.mOcc || 0));
+
+    // D-7 이내 미판매 일수 집계
+    var d7VacantCount = 0;
+    (globalData.dailyRecs || []).forEach(function(it) {
+      if (it.diffDays >= 0 && it.diffDays <= 7) {
+        if (String(it.myStatus).indexOf('공실') !== -1) {
+          d7VacantCount++;
+        }
+      }
+    });
+    document.getElementById('kpi-d7').innerText = d7VacantCount + '일';
+
+    // 30일 평일, 주말, 60일 전체 점유율
+    setKpi('kpi-wkday', 'diff-wkday', Number(p.mWeekdayOcc || 0), Number(m.mWeekdayOcc || 0));
     setKpi('kpi-wknd', 'diff-wknd', Number(p.mWeekendOcc || 0), Number(m.mWeekendOcc || 0));
     setKpi('kpi-60', 'diff-60', Number(p.occ60 || 0), Number(m.occ60 || 0));
   }
 
-  if (globalData.urgentActions && globalData.urgentActions.length > 0) {
-    document.getElementById('urgent-card').style.display = 'block';
-    var uHtml = '';
-    globalData.urgentActions.forEach(function(it) {
-      uHtml += '<div class="action-item"><div class="action-top">' +
-        '<span>[' + it.dDay + '] ' + String(it.date).substring(5) + '(' + it.weekday + ')</span>' +
-        '<span class="action-price">' + fmtPrice(it.suggestedPrice) + '</span></div>' +
-        '<div class="action-desc">' + it.diagnosis + '</div></div>';
-    });
-    document.getElementById('urgent-list').innerHTML = uHtml;
-  }
+  renderUrgentActionCards();
   renderRecList();
 }
 
@@ -266,13 +536,70 @@ function setKpi(vId, dId, myV, avgV) {
   document.getElementById(vId).innerText = myV.toFixed(1) + '%';
   var diff = (myV - avgV).toFixed(1);
   var el = document.getElementById(dId);
-  if (diff >= 0) {
-    el.innerText = '+' + diff + '%p';
-    el.className = 'diff plus';
-  } else {
-    el.innerText = diff + '%p';
-    el.className = 'diff minus';
+  el.innerText = '시장 대비 ' + (diff >= 0 ? '+' : '') + diff + '%p';
+}
+
+function renderUrgentActionCards() {
+  var cont = document.getElementById('urgent-list');
+  var actions = globalData.urgentActions || [];
+
+  if (actions.length === 0) {
+    cont.innerHTML = '<div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:16px; text-align:center; font-size:0.75rem; color:var(--text-sub);">현재 긴급 조정이 필요한 날짜가 없습니다. 적정 요금을 유지하고 있습니다.</div>';
+    return;
   }
+
+  var html = '';
+  actions.slice(0, 3).forEach(function(it) {
+    var diag = String(it.diagnosis || '');
+    var cardCls = 'action-card warning';
+    var tagCls = 'tag-yellow';
+    var tagEmoji = '⚠️';
+    var targetCls = 'yellow';
+    var diffCls = 'diff-yellow';
+
+    var myP = parseInt(String(it.myPrice).replace(/[^\d]/g, ''), 10) || 0;
+    var suggP = parseInt(String(it.suggestedPrice).replace(/[^\d]/g, ''), 10) || 0;
+    var diffText = '';
+
+    if (diag.indexOf('위험') !== -1 || diag.indexOf('직전 공실') !== -1) {
+      cardCls = 'action-card urgent';
+      tagCls = 'tag-red';
+      tagEmoji = '🚨';
+      targetCls = 'down';
+      diffCls = 'diff-down';
+      if (myP > 0 && suggP > 0) {
+        var pct = Math.round(((myP - suggP) / myP) * 100);
+        diffText = '-' + pct + '% 할인';
+      }
+    } else if (diag.indexOf('수요') !== -1 || diag.indexOf('인상') !== -1 || diag.indexOf('부족') !== -1) {
+      cardCls = 'action-card opportunity';
+      tagCls = 'tag-green';
+      tagEmoji = '🔥';
+      targetCls = 'up';
+      diffCls = 'diff-up';
+      if (myP > 0 && suggP > 0) {
+        var diffVal = suggP - myP;
+        diffText = '+' + fmtPrice(diffVal) + ' 인상';
+      }
+    } else {
+      diffText = '-₩13,000 조정';
+    }
+
+    html += '<div class="' + cardCls + '">' +
+      '<div class="card-top">' +
+        '<span class="date-badge">' + String(it.date).substring(5) + ' (' + it.weekday + ') <small>' + it.dDay + '</small></span>' +
+        '<span class="tag ' + tagCls + '">' + tagEmoji + ' ' + diag + '</span>' +
+      '</div>' +
+      '<div class="price-compare">' +
+        '<span class="price-curr">' + fmtPrice(it.myPrice) + '</span>' +
+        '<span class="price-target ' + targetCls + '">' + fmtPrice(it.suggestedPrice) + '</span>' +
+        '<span class="diff-badge ' + diffCls + '">' + diffText + '</span>' +
+      '</div>' +
+      '<div class="guide-text">' + (it.action || it.diagnosis || '주변 경쟁가 대비 요금 조정을 권장합니다.') + '</div>' +
+    '</div>';
+  });
+
+  cont.innerHTML = html;
 }
 
 function setRecFilter(mode, btn) {
@@ -282,35 +609,120 @@ function setRecFilter(mode, btn) {
   renderRecList();
 }
 
+// ----------------------------------------------------
+// renderRecList (마감 톤다운 & 회색톤 날짜 컬러 적용)
+// ----------------------------------------------------
 function renderRecList() {
   var cont = document.getElementById('daily-rec-container');
   var list = globalData.dailyRecs || [];
+  var matrixRows = (globalData.matrixData && globalData.matrixData.rows) ? globalData.matrixData.rows : [];
+  var compTitles = (globalData.matrixData && globalData.matrixData.compTitles) ? globalData.matrixData.compTitles : [];
+
   var filtered = list.filter(function(d) {
-    if (currentRecFilter === 'vacant') return String(d.myStatus).indexOf('공실') !== -1;
+    if (currentRecFilter === 'my_vacant') return String(d.myStatus).indexOf('공실') !== -1;
+    if (currentRecFilter === 'weekday') return d.weekday !== '금' && d.weekday !== '토';
     if (currentRecFilter === 'weekend') return d.weekday === '금' || d.weekday === '토';
     return true;
   });
 
   var html = '';
+
   filtered.forEach(function(d) {
-    var sCls = 'status-vacant';
-    var myS = String(d.myStatus || '');
-    if (myS.indexOf('마감') !== -1) sCls = 'status-closed';
-    else if (myS.indexOf('예약') !== -1) sCls = 'status-booked';
+    var isMyVacant = String(d.myStatus).indexOf('공실') !== -1;
+    var badgeCls = isMyVacant ? 'badge-vacant' : 'badge-booked';
+    var statusText = isMyVacant ? '내방 공실' : '내방 마감';
 
-    var sugg = (myS.indexOf('공실') !== -1 && d.suggestedPrice !== '-')
-      ? '➔ ' + fmtPrice(d.suggestedPrice) : '';
+    var dateParts = String(d.date).split('-');
+    var mmdd = dateParts.length >= 3 ? dateParts[1] + '/' + dateParts[2] : d.date;
 
-    html += '<div class="daily-row">' +
-      '<div class="date-col"><div class="date-main">' + String(d.date).substring(5) + ' <small>(' + d.weekday + ')</small></div><div class="date-sub">' + d.dDay + '</div></div>' +
-      '<div class="status-badge ' + sCls + '">' + myS + '</div>' +
-      '<div class="price-col"><div class="price-curr">' + fmtPrice(d.myPrice) + '</div><div class="price-sugg">' + sugg + '</div></div>' +
-      '<div class="market-col">' + d.marketRate + '%</div></div>';
+    var isSat = d.weekday === '토';
+    var isSun = d.weekday === '일';
+
+    // 💡 [개선] 마감된 날짜는 전체 톤다운 + 회색톤의 블루/레드 적용
+    var itemRowCls = isMyVacant ? 'daily-item' : 'daily-item is-booked-row';
+    var dateColorCls = '';
+
+    if (isMyVacant) {
+      dateColorCls = isSat ? 'day-sat-vivid' : (isSun ? 'day-sun-vivid' : 'day-normal-vivid');
+    } else {
+      dateColorCls = isSat ? 'day-sat-muted' : (isSun ? 'day-sun-muted' : 'day-normal-muted');
+    }
+
+    var myP = parseInt(String(d.myPrice).replace(/[^\d]/g, ''), 10) || 0;
+    var suggP = parseInt(String(d.suggestedPrice).replace(/[^\d]/g, ''), 10) || 0;
+
+    var suggHtml = '-';
+    var suggCls = '';
+    var diagColor = 'var(--text-sub)';
+
+    if (isMyVacant && d.suggestedPrice !== '-') {
+      if (suggP < myP && suggP > 0) {
+        suggCls = 'd-sugg-down';
+        diagColor = 'var(--red)';
+      } else if (suggP > myP) {
+        suggCls = 'd-sugg-up';
+        diagColor = 'var(--green)';
+      }
+      suggHtml = '➔ ' + fmtPrice(d.suggestedPrice);
+    }
+
+    var matchingMRow = matrixRows.find(function(mr) {
+      return mr.date === mmdd || d.date.indexOf(mr.date) !== -1;
+    });
+
+    var compChipsHtml = '';
+    if (matchingMRow && matchingMRow.comps) {
+      var vacantComps = [];
+      matchingMRow.comps.forEach(function(c, cIdx) {
+        if (String(c.status).indexOf('공실') !== -1) {
+          vacantComps.push({
+            idx: cIdx,
+            name: compTitles[cIdx] || ('경쟁 숙소 ' + (cIdx + 1)),
+            price: c.price
+          });
+        }
+      });
+
+      if (vacantComps.length > 0) {
+        compChipsHtml += '<div class="comp-scroll-wrapper"><span class="comp-scroll-label">경쟁공실(' + vacantComps.length + '):</span>';
+        vacantComps.forEach(function(vc) {
+          compChipsHtml += '<div class="comp-chip" onclick="goToProfile(' + vc.idx + ')">' +
+            '<span class="chip-name">' + vc.name + '</span>' +
+            '<span class="chip-price">' + vc.price + '</span>' +
+          '</div>';
+        });
+        compChipsHtml += '</div>';
+      } else {
+        compChipsHtml += '<div class="comp-scroll-wrapper"><span class="comp-scroll-label">경쟁공실:</span><span class="chip-none">주변 전 객실 마감완료</span></div>';
+      }
+    }
+
+    html += '<div class="' + itemRowCls + '">' +
+      '<div class="daily-main-row">' +
+        '<div class="date-box">' +
+          '<div class="d-day-num ' + dateColorCls + '">' + mmdd + '</div>' +
+          '<div class="d-day-sub ' + dateColorCls + '">' + d.dDay + ' (' + d.weekday + ')</div>' +
+        '</div>' +
+        '<div class="diag-box">' +
+          '<span class="' + badgeCls + '">' + statusText + '</span>' +
+          '<div class="d-diag-text" style="color:' + diagColor + ';">' + d.diagnosis + '</div>' +
+        '</div>' +
+        '<div class="price-box">' +
+          '<div class="d-curr-price">' + fmtPrice(d.myPrice) + '</div>' +
+          '<div class="d-sugg-price ' + suggCls + '">' + suggHtml + '</div>' +
+          '<div class="d-market-rate">시장마감 ' + d.marketRate + '%</div>' +
+        '</div>' +
+      '</div>' +
+      compChipsHtml +
+    '</div>';
   });
-  cont.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--text-sub);">내역이 없습니다.</div>';
+
+  cont.innerHTML = html || '<div style="text-align:center;padding:24px;color:var(--text-sub);">해당 필터 조건의 내역이 없습니다.</div>';
 }
 
-// 3. 숙소 프로필 탭
+// ----------------------------------------------------
+// 숙소 프로필 탭 렌더링 (네이버 지도 앱 연동 반영)
+// ----------------------------------------------------
 function sortProfiles(mode, btn) {
   profileSortMode = mode;
   document.querySelectorAll('#tab-prof .filter-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -356,6 +768,18 @@ function renderTabProf() {
 
     var cardId = isMy ? 'prof-card-my' : ('prof-card-' + (p.roomId || idx));
 
+    // 💡 [신규] 네이버 지도 앱/웹 검색 URL 생성
+    var rawAddr = String(p.address || '').trim();
+    var mapHtml = '<span>주소 정보 없음</span>';
+
+    if (rawAddr && rawAddr !== '주소 정보 없음' && rawAddr !== '-') {
+      var encodedAddr = encodeURIComponent(rawAddr);
+      var naverMapUrl = 'https://map.naver.com/v5/search/' + encodedAddr;
+      mapHtml = '<a href="' + naverMapUrl + '" target="_blank" class="map-link">' +
+                  rawAddr + ' <span class="map-icon">N지도↗</span>' +
+                '</a>';
+    }
+
     html += '<div id="' + cardId + '" class="' + cardCls + '" data-title="' + p.title + '">' +
       '<div class="p-header">' +
         '<a href="' + airbnbUrl + '" target="_blank" class="p-title-link">' +
@@ -364,7 +788,7 @@ function renderTabProf() {
         '<span class="' + badgeCls + '">' + badgeText + '</span>' +
       '</div>' +
       '<div class="p-specs">' +
-        '<div>📍 ' + (p.address || '주소 정보 없음') + '</div>' +
+        '<div>📍 ' + mapHtml + '</div>' +
         '<div>🏠 ' + (p.spec || '-') + ' | ⭐ ' + p.rating + ' (후기 ' + p.reviews + '개)</div>' +
       '</div>' +
       '<div class="p-pricing-box">' +
@@ -394,7 +818,9 @@ function getOccClass(val) {
   return 'occ-low';
 }
 
-// 4. 진단 리포트 탭
+// ----------------------------------------------------
+// 진단 리포트 탭 렌더링
+// ----------------------------------------------------
 function renderTabAudit() {
   var cont = document.getElementById('audit-container');
   var sec = globalData.auditSections || [];
@@ -425,9 +851,19 @@ function fmtPrice(v) {
   return isNaN(n) ? v : '₩' + n.toLocaleString();
 }
 
+function formatCompactPrice(val) {
+  if (!val || val === '-' || val === '0') return '-';
+  var num = parseInt(String(val).replace(/[^\d]/g, ''), 10);
+  if (isNaN(num) || num === 0) return '-';
+  if (num >= 10000) {
+    var man = (num / 10000).toFixed(1);
+    return (man.endsWith('.0') ? parseInt(man, 10) : man) + '만';
+  }
+  return (num / 1000).toFixed(0) + '천';
+}
 
 // ----------------------------------------------------
-// 스프레드시트 메모(Note) 모바일 터치 & PC 마우스 오버 처리
+// 구글 시트 메모(Note) 툴팁 이벤트
 // ----------------------------------------------------
 var tooltipEl = null;
 
@@ -445,17 +881,17 @@ function showNoteTooltip(e, noteText) {
   tip.innerText = decodeURIComponent(noteText);
   tip.style.display = 'block';
 
-  var rect = e.target.closest('.cell-box').getBoundingClientRect();
+  var cell = e.target.closest('.cell-box');
+  if (!cell) return;
+  var rect = cell.getBoundingClientRect();
   var tipWidth = 230;
-  
-  // 화면 밖으로 나가지 않도록 좌우 위치 보정
+
   var left = rect.left + window.scrollX;
   if (left + tipWidth > window.innerWidth) {
     left = window.innerWidth - tipWidth - 16;
   }
   if (left < 10) left = 10;
 
-  // 상단으로 띄우되, 화면 위로 벗어나면 셀 아래로 배치
   var top = rect.top - 10;
   tip.style.left = left + 'px';
   tip.style.top = top + 'px';
@@ -467,12 +903,10 @@ function showNoteTooltip(e, noteText) {
   }
 }
 
-
 function hideNoteTooltip() {
   if (tooltipEl) tooltipEl.style.display = 'none';
 }
 
-// 이벤트 위임으로 셀 터치 및 마우스 이벤트 감지
 document.addEventListener('mouseover', function(e) {
   var target = e.target.closest('.cell-box.has-note');
   if (target) {
@@ -487,7 +921,6 @@ document.addEventListener('mouseout', function(e) {
   }
 });
 
-// 모바일 탭 터치 지원
 document.addEventListener('click', function(e) {
   var target = e.target.closest('.cell-box.has-note');
   if (target) {
