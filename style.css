@@ -241,3 +241,56 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 #loading { text-align: center; padding: 80px 0; color: var(--text-sub); font-size: 0.9rem; }
 .spinner { width: 34px; height: 34px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+
+
+
+/* ----------------------------------------------------
+   스프레드시트 메모(Note) 팝업 & 인하/인상 뱃지 디자인
+   ---------------------------------------------------- */
+/* 가격 변동 시 뱃지 색상 */
+.badge-down {
+  background: rgba(244, 63, 94, 0.2) !important;
+  color: #ff6b81 !important;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+}
+.badge-up {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+/* 메모가 있는 셀 표시 (구글 시트처럼 우측 상단 작은 삼각형 표시) */
+.cell-box.has-note {
+  position: relative;
+  cursor: pointer;
+}
+.cell-box.has-note::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 0;
+  height: 0;
+  border-top: 5px solid var(--accent);
+  border-left: 5px solid transparent;
+}
+
+/* 툴팁 기본 위치 */
+.note-tooltip {
+  display: none;
+  position: fixed;
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  text-align: left;
+  z-index: 9999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  max-width: 240px;
+  pointer-events: none;
+}
