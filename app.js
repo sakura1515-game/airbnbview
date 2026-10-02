@@ -2,7 +2,7 @@
 const APP_PIN = "7979";
 
 // 연동된 구글 웹 앱 URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxxTKI71ovSM8mDFKp0X-pRxv78ASmz5X842HxfKjVsPJJgYGJtucEOgmh1pgxvSCOV/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz7j5nskLw2d6B4o39eldVbDHa_6fTSdVSNOQliiXP06GkmXH4kb2KoayjUcB35XO4v/exec";
 
 var globalData = null;
 var currentRecFilter = 'all';
