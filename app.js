@@ -1334,39 +1334,515 @@ function jumpToDashboardDate(targetDate) {
 // ----------------------------------------------------
 // 사진 갤러리 모달 제어 함수
 // ----------------------------------------------------
+// ----------------------------------------------------
+// 사진 갤러리 및 하단 필름스트립 뷰어 제어 로직
+// ----------------------------------------------------
+// ----------------------------------------------------
+// 📷 사진 갤러리 팝업 & 하단 필름스트립 뷰어 엔진
+// ----------------------------------------------------
+var currentGalleryPhotos = [];
+var currentPhotoIndex = 0;
+
+// 줌(Zoom) & 드래그(Pan) 상태 변수
+var zoomScale = 1;
+var translateX = 0;
+var translateY = 0;
+var isDragging = false;
+var startX = 0;
+var startY = 0;
+var initialPinchDistance = null;
+var lastTapTime = 0;
+
+// 1. 프로필 카드에서 "X장 사진보기" 눌렀을 때 3열 바둑판 모달 열기
 function openPhotoModal(roomIdOrIdx) {
   var list = [];
   if (globalData.myProfile) list.push(globalData.myProfile);
   if (globalData.profiles) list = list.concat(globalData.profiles);
 
   var targetProf = list.find(function(p) { return String(p.roomId) === String(roomIdOrIdx); });
-  if (!targetProf && typeof roomIdOrIdx === 'number') {
-    targetProf = list[roomIdOrIdx];
-  }
+  if (!targetProf && typeof roomIdOrIdx === 'number') targetProf = list[roomIdOrIdx];
   if (!targetProf) return;
 
-  var photos = (targetProf.allPhotos && targetProf.allPhotos.length > 0) 
+  currentGalleryPhotos = (targetProf.allPhotos && targetProf.allPhotos.length > 0) 
     ? targetProf.allPhotos 
     : (targetProf.imageUrl ? [targetProf.imageUrl] : []);
 
   document.getElementById('modal-room-title').innerText = targetProf.title;
-  document.getElementById('modal-photo-count').innerText = '총 ' + photos.length + '장의 사진 (클릭 시 원본 새 창 열림)';
+  document.getElementById('modal-photo-count').innerText = '총 ' + currentGalleryPhotos.length + '장의 사진 (터치하여 크게 보기)';
 
   var gridHtml = '';
-  photos.forEach(function(pUrl, idx) {
-    gridHtml += '<div class="photo-gallery-item">' +
-      '<a href="' + pUrl + '" target="_blank">' +
-        '<img src="' + pUrl + '" alt="사진 ' + (idx + 1) + '" loading="lazy" />' +
-      '</a>' +
+  currentGalleryPhotos.forEach(function(pUrl, idx) {
+    gridHtml += '<div class="photo-gallery-item" onclick="openPhotoViewer(' + idx + ')">' +
+      '<img src="' + pUrl + '" alt="사진 ' + (idx + 1) + '" loading="lazy" />' +
     '</div>';
   });
 
   document.getElementById('modal-gallery-grid').innerHTML = gridHtml;
   document.getElementById('photo-modal').style.display = 'flex';
-  document.body.style.overflow = 'hidden'; // 배경 스크롤 방지
+  document.body.style.overflow = 'hidden';
 }
 
 function closePhotoModal(e) {
   document.getElementById('photo-modal').style.display = 'none';
   document.body.style.overflow = '';
 }
+
+// 2. 바둑판 타일 중 하나를 터치했을 때 전체화면 확대 뷰어 열기
+function openPhotoViewer(idx) {
+  currentPhotoIndex = idx;
+
+  // 하단 미니 썸네일 트랙(Filmstrip) 생성
+  var trackHtml = '';
+  currentGalleryPhotos.forEach(function(pUrl, tIdx) {
+    trackHtml += '<div class="viewer-thumb-item" id="viewer-thumb-' + tIdx + '" onclick="selectPhotoViewer(' + tIdx + ')">' +
+      '<img src="' + pUrl + '" alt="미니썸네일 ' + (tIdx + 1) + '" loading="lazy" />' +
+    '</div>';
+  });
+  document.getElementById('viewer-thumbs-track').innerHTML = trackHtml;
+
+  updateViewer();
+  document.getElementById('photo-viewer').style.display = 'flex';
+  initViewerGestures(); // 제스처 이벤트 등록
+}
+
+function selectPhotoViewer(idx) {
+  currentPhotoIndex = idx;
+  updateViewer();
+}
+
+function closePhotoViewer() {
+  resetZoom();
+  document.getElementById('photo-viewer').style.display = 'none';
+}
+
+function prevPhoto(e) {
+  if (e) e.stopPropagation();
+  resetZoom();
+  currentPhotoIndex = (currentPhotoIndex - 1 + currentGalleryPhotos.length) % currentGalleryPhotos.length;
+  updateViewer();
+}
+
+function nextPhoto(e) {
+  if (e) e.stopPropagation();
+  resetZoom();
+  currentPhotoIndex = (currentPhotoIndex + 1) % currentGalleryPhotos.length;
+  updateViewer();
+}
+
+// 3. 뷰어 이미지 변경 및 하단 썸네일 자동 스크롤
+function updateViewer() {
+  if (!currentGalleryPhotos || currentGalleryPhotos.length === 0) return;
+
+  resetZoom();
+
+  var mainImg = document.getElementById('viewer-img');
+  mainImg.src = currentGalleryPhotos[currentPhotoIndex];
+  document.getElementById('viewer-counter').innerText = (currentPhotoIndex + 1) + ' / ' + currentGalleryPhotos.length;
+
+  document.querySelectorAll('.viewer-thumb-item').forEach(function(el, i) {
+    if (i === currentPhotoIndex) {
+      el.classList.add('active');
+      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+// 4. 줌 및 위치 초기화 함수
+function resetZoom() {
+  zoomScale = 1;
+  translateX = 0;
+  translateY = 0;
+  isDragging = false;
+  var img = document.getElementById('viewer-img');
+  if (img) {
+    img.classList.remove('is-zoomed', 'is-dragging');
+    img.style.transform = 'translate(0px, 0px) scale(1)';
+  }
+}
+
+function applyTransform() {
+  var img = document.getElementById('viewer-img');
+  if (!img) return;
+
+  if (zoomScale < 1) {
+    zoomScale = 1;
+    translateX = 0;
+    translateY = 0;
+  }
+  if (zoomScale > 4) zoomScale = 4;
+
+  if (zoomScale > 1) {
+    img.classList.add('is-zoomed');
+  } else {
+    img.classList.remove('is-zoomed');
+    translateX = 0;
+    translateY = 0;
+  }
+
+  img.style.transform = 'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomScale + ')';
+}
+
+// 5. 줌 & 드래그 제스처 바인딩 (더블탭/더블클릭/휠/핀치줌/드래그)
+var isGesturesBound = false;
+function initViewerGestures() {
+  if (isGesturesBound) return;
+  var img = document.getElementById('viewer-img');
+  if (!img) return;
+  isGesturesBound = true;
+
+  // A. 더블 클릭 / 더블 탭 토글 (1배 ⟷ 2.5배)
+  img.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var currentTime = new Date().getTime();
+    var tapLength = currentTime - lastTapTime;
+
+    if (tapLength < 300 && tapLength > 0) {
+      if (zoomScale > 1) {
+        resetZoom();
+      } else {
+        zoomScale = 2.5;
+        applyTransform();
+      }
+    }
+    lastTapTime = currentTime;
+  });
+
+  // B. PC 마우스 휠 줌
+  img.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      zoomScale = Math.min(4, zoomScale + 0.3);
+    } else {
+      zoomScale = Math.max(1, zoomScale - 0.3);
+    }
+    applyTransform();
+  }, { passive: false });
+
+  // C. PC 마우스 드래그 이동
+  img.addEventListener('mousedown', function(e) {
+    if (zoomScale <= 1) return;
+    isDragging = true;
+    startX = e.clientX - translateX;
+    startY = e.clientY - translateY;
+    img.classList.add('is-dragging');
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    translateX = e.clientX - startX;
+    translateY = e.clientY - startY;
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', function() {
+    if (isDragging) {
+      isDragging = false;
+      img.classList.remove('is-dragging');
+    }
+  });
+
+  // D. 모바일 터치 제스처 (핀치 줌 & 1손가락 드래그)
+  img.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      initialPinchDistance = Math.hypot(dx, dy);
+    } else if (e.touches.length === 1 && zoomScale > 1) {
+      isDragging = true;
+      startX = e.touches[0].clientX - translateX;
+      startY = e.touches[0].clientY - translateY;
+      img.classList.add('is-dragging');
+    }
+  }, { passive: true });
+
+  img.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2 && initialPinchDistance) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var newDistance = Math.hypot(dx, dy);
+      var factor = newDistance / initialPinchDistance;
+
+      zoomScale = Math.min(4, Math.max(1, zoomScale * (factor > 1 ? 1.04 : 0.96)));
+      applyTransform();
+      initialPinchDistance = newDistance;
+    } else if (e.touches.length === 1 && isDragging && zoomScale > 1) {
+      translateX = e.touches[0].clientX - startX;
+      translateY = e.touches[0].clientY - startY;
+      applyTransform();
+    }
+  }, { passive: true });
+
+  img.addEventListener('touchend', function() {
+    initialPinchDistance = null;
+    isDragging = false;
+    img.classList.remove('is-dragging');
+  });
+}
+
+// 키보드 좌우 방향키 및 ESC 닫기
+document.addEventListener('keydown', function(e) {
+  var viewer = document.getElementById('photo-viewer');
+  if (viewer && viewer.style.display !== 'none') {
+    if (e.key === 'ArrowLeft') prevPhoto();
+    if (e.key === 'ArrowRight') nextPhoto();
+    if (e.key === 'Escape') closePhotoViewer();
+  }
+});
+
+// ----------------------------------------------------
+// 📷 사진 갤러리 팝업 & 하단 필름스트립 뷰어 엔진 (최종)
+// ----------------------------------------------------
+var currentGalleryPhotos = [];
+var currentPhotoIndex = 0;
+
+// 줌(Zoom) & 드래그(Pan) 상태 관리 변수
+var zoomScale = 1;
+var translateX = 0;
+var translateY = 0;
+var isDragging = false;
+var startX = 0;
+var startY = 0;
+var initialPinchDistance = null;
+var lastTapTime = 0;
+
+// 1. 프로필 카드에서 "X장 사진보기" 눌렀을 때 3열 바둑판 모달 열기
+function openPhotoModal(roomIdOrIdx) {
+  var list = [];
+  if (globalData.myProfile) list.push(globalData.myProfile);
+  if (globalData.profiles) list = list.concat(globalData.profiles);
+
+  var targetProf = list.find(function(p) { return String(p.roomId) === String(roomIdOrIdx); });
+  if (!targetProf && typeof roomIdOrIdx === 'number') targetProf = list[roomIdOrIdx];
+  if (!targetProf) return;
+
+  currentGalleryPhotos = (targetProf.allPhotos && targetProf.allPhotos.length > 0) 
+    ? targetProf.allPhotos 
+    : (targetProf.imageUrl ? [targetProf.imageUrl] : []);
+
+  document.getElementById('modal-room-title').innerText = targetProf.title;
+  document.getElementById('modal-photo-count').innerText = '총 ' + currentGalleryPhotos.length + '장의 사진 (터치하여 크게 보기)';
+
+  var gridHtml = '';
+  currentGalleryPhotos.forEach(function(pUrl, idx) {
+    gridHtml += '<div class="photo-gallery-item" onclick="openPhotoViewer(' + idx + ')">' +
+      '<img src="' + pUrl + '" alt="사진 ' + (idx + 1) + '" loading="lazy" />' +
+    '</div>';
+  });
+
+  document.getElementById('modal-gallery-grid').innerHTML = gridHtml;
+  document.getElementById('photo-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closePhotoModal(e) {
+  document.getElementById('photo-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// 2. 바둑판 타일 터치 시 전체화면 확대 뷰어 열기
+function openPhotoViewer(idx) {
+  currentPhotoIndex = idx;
+
+  // 하단 미니 썸네일 트랙(Filmstrip) 생성
+  var trackHtml = '';
+  currentGalleryPhotos.forEach(function(pUrl, tIdx) {
+    trackHtml += '<div class="viewer-thumb-item" id="viewer-thumb-' + tIdx + '" onclick="selectPhotoViewer(' + tIdx + ')">' +
+      '<img src="' + pUrl + '" alt="미니썸네일 ' + (tIdx + 1) + '" loading="lazy" />' +
+    '</div>';
+  });
+  document.getElementById('viewer-thumbs-track').innerHTML = trackHtml;
+
+  updateViewer();
+  document.getElementById('photo-viewer').style.display = 'flex';
+  initViewerGestures(); // 제스처 이벤트 확실히 바인딩
+}
+
+function selectPhotoViewer(idx) {
+  currentPhotoIndex = idx;
+  updateViewer();
+}
+
+function closePhotoViewer() {
+  resetZoom();
+  document.getElementById('photo-viewer').style.display = 'none';
+}
+
+function prevPhoto(e) {
+  if (e) e.stopPropagation();
+  resetZoom();
+  currentPhotoIndex = (currentPhotoIndex - 1 + currentGalleryPhotos.length) % currentGalleryPhotos.length;
+  updateViewer();
+}
+
+function nextPhoto(e) {
+  if (e) e.stopPropagation();
+  resetZoom();
+  currentPhotoIndex = (currentPhotoIndex + 1) % currentGalleryPhotos.length;
+  updateViewer();
+}
+
+// 3. 뷰어 이미지 갱신 및 썸네일 활성화/자동 스크롤
+function updateViewer() {
+  if (!currentGalleryPhotos || currentGalleryPhotos.length === 0) return;
+
+  resetZoom();
+
+  var mainImg = document.getElementById('viewer-img');
+  mainImg.src = currentGalleryPhotos[currentPhotoIndex];
+  document.getElementById('viewer-counter').innerText = (currentPhotoIndex + 1) + ' / ' + currentGalleryPhotos.length;
+
+  document.querySelectorAll('.viewer-thumb-item').forEach(function(el, i) {
+    if (i === currentPhotoIndex) {
+      el.classList.add('active');
+      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+// 4. 줌 및 위치 초기화
+function resetZoom() {
+  zoomScale = 1;
+  translateX = 0;
+  translateY = 0;
+  isDragging = false;
+  var img = document.getElementById('viewer-img');
+  if (img) {
+    img.classList.remove('is-zoomed', 'is-dragging');
+    img.style.transform = 'translate(0px, 0px) scale(1)';
+  }
+}
+
+function applyTransform() {
+  var img = document.getElementById('viewer-img');
+  if (!img) return;
+
+  if (zoomScale < 1) {
+    zoomScale = 1;
+    translateX = 0;
+    translateY = 0;
+  }
+  if (zoomScale > 4) zoomScale = 4;
+
+  if (zoomScale > 1) {
+    img.classList.add('is-zoomed');
+  } else {
+    img.classList.remove('is-zoomed');
+    translateX = 0;
+    translateY = 0;
+  }
+
+  img.style.transform = 'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomScale + ')';
+}
+
+// 5. 줌 & 드래그 이벤트 바인딩 (더블탭/더블클릭/휠/핀치줌/패닝)
+var isGesturesBound = false;
+function initViewerGestures() {
+  if (isGesturesBound) return;
+  var img = document.getElementById('viewer-img');
+  if (!img) return;
+  isGesturesBound = true;
+
+  // A. 더블 클릭 / 더블 탭 토글 (1배 ⟷ 2.5배)
+  img.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var currentTime = new Date().getTime();
+    var tapLength = currentTime - lastTapTime;
+
+    if (tapLength < 320 && tapLength > 0) {
+      if (zoomScale > 1) {
+        resetZoom();
+      } else {
+        zoomScale = 2.5;
+        applyTransform();
+      }
+    }
+    lastTapTime = currentTime;
+  });
+
+  // B. PC 마우스 휠 확대/축소
+  img.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      zoomScale = Math.min(4, zoomScale + 0.3);
+    } else {
+      zoomScale = Math.max(1, zoomScale - 0.3);
+    }
+    applyTransform();
+  }, { passive: false });
+
+  // C. PC 마우스 드래그 이동 (확대 상태일 때)
+  img.addEventListener('mousedown', function(e) {
+    if (zoomScale <= 1) return;
+    isDragging = true;
+    startX = e.clientX - translateX;
+    startY = e.clientY - translateY;
+    img.classList.add('is-dragging');
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    translateX = e.clientX - startX;
+    translateY = e.clientY - startY;
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', function() {
+    if (isDragging) {
+      isDragging = false;
+      img.classList.remove('is-dragging');
+    }
+  });
+
+  // D. 모바일 터치 제스처 (핀치 줌 & 1손가락 이동)
+  img.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      initialPinchDistance = Math.hypot(dx, dy);
+    } else if (e.touches.length === 1 && zoomScale > 1) {
+      isDragging = true;
+      startX = e.touches[0].clientX - translateX;
+      startY = e.touches[0].clientY - translateY;
+      img.classList.add('is-dragging');
+    }
+  }, { passive: false });
+
+  img.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2 && initialPinchDistance) {
+      e.preventDefault(); // 기본 브라우저 줌 방지
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var newDistance = Math.hypot(dx, dy);
+      var factor = newDistance / initialPinchDistance;
+
+      zoomScale = Math.min(4, Math.max(1, zoomScale * (factor > 1 ? 1.05 : 0.95)));
+      applyTransform();
+      initialPinchDistance = newDistance;
+    } else if (e.touches.length === 1 && isDragging && zoomScale > 1) {
+      e.preventDefault(); // 화면 전체 스크롤 방지
+      translateX = e.touches[0].clientX - startX;
+      translateY = e.touches[0].clientY - startY;
+      applyTransform();
+    }
+  }, { passive: false });
+
+  img.addEventListener('touchend', function() {
+    initialPinchDistance = null;
+    isDragging = false;
+    img.classList.remove('is-dragging');
+  });
+}
+
+// 키보드 좌우 방향키 및 ESC 제어
+document.addEventListener('keydown', function(e) {
+  var viewer = document.getElementById('photo-viewer');
+  if (viewer && viewer.style.display !== 'none') {
+    if (e.key === 'ArrowLeft') prevPhoto();
+    if (e.key === 'ArrowRight') nextPhoto();
+    if (e.key === 'Escape') closePhotoViewer();
+  }
+});

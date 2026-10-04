@@ -180,6 +180,26 @@
       <div class="photo-gallery-grid" id="modal-gallery-grid"></div>
     </div>
   </div>
+
+  <!-- 🔍 단일 사진 확대 라이트박스 뷰어 (하단 미니 썸네일 필름스트립 포함) -->
+  <div id="photo-viewer" class="photo-viewer" style="display:none;" onclick="closePhotoViewer()">
+    <button class="viewer-btn viewer-close" onclick="closePhotoViewer()">&times;</button>
+    <button class="viewer-btn viewer-prev" onclick="prevPhoto(event)">&#10094;</button>
+    
+    <div class="viewer-center-content" onclick="event.stopPropagation()">
+      <div class="viewer-main-img-box">
+        <img id="viewer-img" src="" alt="확대 사진" />
+      </div>
+      <div id="viewer-counter" class="viewer-counter">1 / 10</div>
+    </div>
+    
+    <button class="viewer-btn viewer-next" onclick="nextPhoto(event)">&#10095;</button>
+
+    <!-- 💡 하단 미니 썸네일 가로 필름스트립 -->
+    <div class="viewer-bottom-bar" onclick="event.stopPropagation()">
+      <div class="viewer-thumbs-track" id="viewer-thumbs-track"></div>
+    </div>
+  </div>
   
 </body>
 </html>

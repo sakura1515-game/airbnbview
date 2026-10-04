@@ -23,7 +23,9 @@ body {
   padding-bottom: 70px; 
 }
 
-/* PIN 인증 잠금 화면 */
+/* ----------------------------------------------------
+   PIN 인증 잠금 화면
+---------------------------------------------------- */
 #lock-screen {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: var(--bg); z-index: 9999;
@@ -48,7 +50,9 @@ body {
 }
 .pin-err { font-size: 0.75rem; color: var(--red); margin-top: 10px; display: none; }
 
-/* 헤더 */
+/* ----------------------------------------------------
+   헤더 & 하단 탭 바
+---------------------------------------------------- */
 .header { 
   padding: 14px 16px 10px; 
   background: var(--bg); 
@@ -59,7 +63,6 @@ body {
 .header h1 { font-size: 1.1rem; font-weight: 700; color: #fff; }
 .header .time { font-size: 0.72rem; color: var(--text-sub); }
 
-/* 탭 바 */
 .tab-bar { 
   position: fixed; bottom: 0; left: 0; right: 0; height: 56px; 
   background: #0c1322; border-top: 1px solid var(--card-border); 
@@ -84,7 +87,7 @@ body {
   margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; 
 }
 
-/* 버튼류 */
+/* 필터 버튼류 */
 .filter-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
 .filter-btn { 
   flex: 1; padding: 8px 4px; font-size: 0.72rem; border-radius: 6px; 
@@ -99,7 +102,7 @@ body {
 
 /* ----------------------------------------------------
    대시보드 매트릭스 테이블 & 2D Sticky 레이아웃
-   ---------------------------------------------------- */
+---------------------------------------------------- */
 .matrix-wrapper {
   position: relative; overflow-x: auto; overflow-y: auto;
   max-height: calc(100vh - 145px); -webkit-overflow-scrolling: touch;
@@ -180,7 +183,7 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
   z-index: 9999; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); max-width: 240px; pointer-events: none;
 }
 
-/* 숙소 클릭 인터랙션 & 프로필 하이라이트 효과 */
+/* 숙소 클릭 인터랙션 */
 .room-clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .room-clickable:active { opacity: 0.6; }
 
@@ -455,7 +458,7 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 
 /* ----------------------------------------------------
    4번째 탭: 실시간 시장 동향 & 활동 피드 디자인
-   ---------------------------------------------------- */
+---------------------------------------------------- */
 .briefing-box {
   background: var(--card-bg); border: 1px solid var(--accent);
   border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
@@ -588,7 +591,7 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
 }
 
 /* ----------------------------------------------------
-   사진 갤러리 전체화면 모달
+   사진 모달 앨범 팝업 컨테이너
 ---------------------------------------------------- */
 .photo-modal {
   position: fixed;
@@ -652,33 +655,217 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
   font-weight: 600;
 }
 
-/* 갤러리 반응형 그리드 (모바일 2열, PC 3~4열) */
+/* ----------------------------------------------------
+   사진 모달 앨범 갤러리 그리드 (모바일 3열 바둑판 타일)
+---------------------------------------------------- */
 .photo-gallery-grid {
   flex: 1;
-  overflow-y: auto;
-  padding: 4px 18px 18px 18px;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px 24px 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr); /* 모바일 기본 3열 */
+  grid-auto-rows: max-content; /* 자식 높이 압축 방지 */
+  gap: 6px;
+  align-items: start;
+}
+
+@media (min-width: 600px) {
+  .photo-gallery-grid {
+    grid-template-columns: repeat(4, 1fr); /* 태블릿 4열 */
+    gap: 8px;
+  }
+}
+
+@media (min-width: 900px) {
+  .photo-gallery-grid {
+    grid-template-columns: repeat(5, 1fr); /* PC 브라우저 5열 */
+    gap: 10px;
+  }
 }
 
 .photo-gallery-item {
+  position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 8px;
+  aspect-ratio: 1 / 1;
+  min-height: 95px; /* 찌그러짐 원천 차단 */
+  border-radius: 6px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: #1e293b;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .photo-gallery-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
-  transition: transform 0.2s ease;
-  cursor: pointer;
+  pointer-events: none;
 }
 
-.photo-gallery-item img:hover {
-  transform: scale(1.04);
+.photo-gallery-item:hover img {
+  transform: scale(1.06);
+}
+.photo-gallery-item:active {
+  opacity: 0.75;
+}
+
+/* ----------------------------------------------------
+   단일 사진 확대 라이트박스 & 하단 필름스트립 뷰어 (최종)
+---------------------------------------------------- */
+.photo-viewer {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.94);
+  backdrop-filter: blur(8px);
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0 10px 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.viewer-center-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 0;
+}
+
+.viewer-main-img-box {
+  max-width: 90vw;
+  max-height: calc(100vh - 170px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+}
+
+/* 💡 확대/축소 및 드래그가 적용된 단일 #viewer-img */
+#viewer-img {
+  max-width: 100%;
+  max-height: calc(100vh - 170px);
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  transform-origin: center center;
+  transition: transform 0.15s ease-out;
+  cursor: zoom-in;
+  touch-action: none;
+}
+
+#viewer-img.is-zoomed {
+  cursor: grab;
+}
+
+#viewer-img.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.viewer-counter {
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* 좌/우/닫기 버튼 */
+.viewer-btn {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 1.6rem;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.15s ease;
+  z-index: 100010;
+}
+.viewer-btn:hover { background: rgba(255, 255, 255, 0.25); }
+.viewer-btn:active { transform: scale(0.92); }
+
+.viewer-close { top: 16px; right: 16px; font-size: 1.8rem; }
+.viewer-prev { left: 16px; top: calc(50% - 35px); transform: translateY(-50%); }
+.viewer-next { right: 16px; top: calc(50% - 35px); transform: translateY(-50%); }
+
+@media (max-width: 768px) {
+  .viewer-btn { width: 38px; height: 38px; font-size: 1.3rem; }
+  .viewer-prev { left: 8px; }
+  .viewer-next { right: 8px; }
+}
+
+/* 하단 썸네일 가로 스트립 */
+.viewer-bottom-bar {
+  width: 100%;
+  max-width: 1000px;
+  height: 70px;
+  padding: 6px 16px 0 16px;
+  box-sizing: border-box;
+}
+
+.viewer-thumbs-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 100%;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.viewer-thumbs-track::-webkit-scrollbar {
+  height: 4px;
+}
+.viewer-thumbs-track::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.viewer-thumb-item {
+  flex: 0 0 68px;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.45;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+  background: #1e293b;
+}
+
+.viewer-thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.viewer-thumb-item:hover {
+  opacity: 0.8;
+}
+
+/* 현재 선택된 사진 활성 썸네일 */
+.viewer-thumb-item.active {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  transform: scale(1.05);
 }
