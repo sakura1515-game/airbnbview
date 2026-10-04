@@ -116,22 +116,26 @@
       <div class="list-card" id="daily-rec-container"></div>
     </div>
 
-    <!-- 탭 4: 실시간 시장 동향 & 체결가 로그 -->
+    <!-- 탭 4: 실시간 시장 동향 & 활동 피드 -->
     <div id="tab-audit" class="tab-content">
       
-      <!-- 1. 카카오톡 일일 브리핑 아카이브 (최신 브리핑 접이식 카드) -->
+      <!-- 1. 카카오톡 일일 브리핑 아카이브 (가로 스크롤 카드) -->
       <div class="briefing-box" id="briefing-container">
         <div class="briefing-header" onclick="toggleBriefingBody()">
           <span style="font-weight:700; color:var(--accent);">📢 최근 크롤링 종합 브리핑</span>
           <span id="briefing-date-badge" style="font-size:0.7rem; color:var(--text-sub);">-</span>
         </div>
-        <div class="briefing-body" id="briefing-text" style="display:none;"></div>
+        <!-- 💡 최근 20개 가로 스크롤 영역 -->
+        <div id="briefing-scroll-wrapper" style="display:none;">
+          <div class="briefing-scroll-container" id="briefing-cards-list"></div>
+        </div>
       </div>
 
-      <!-- 2. 피드 필터 탭 -->
-      <div class="filter-tabs" style="margin-bottom:12px;">
+      <!-- 2. 피드 필터 탭 (가격변동 추가) -->
+      <div class="filter-tabs" style="margin-bottom:12px; overflow-x:auto; white-space:nowrap; scrollbar-width:none;">
         <button class="filter-btn active" onclick="setFeedFilter('all', this)">전체 피드</button>
         <button class="filter-btn" onclick="setFeedFilter('booked', this)">🚨 마감 체결</button>
+        <button class="filter-btn" onclick="setFeedFilter('price_change', this)">⚡ 가격 변동</button>
         <button class="filter-btn" onclick="setFeedFilter('down', this)">📉 가격 인하</button>
         <button class="filter-btn" onclick="setFeedFilter('up', this)">📈 가격 인상</button>
       </div>
@@ -164,5 +168,18 @@
   </div>
 
   <script src="app.js"></script>
+
+  <!-- 📷 숙소 전체 사진 갤러리 팝업 모달 -->
+  <div id="photo-modal" class="photo-modal" style="display:none;" onclick="closePhotoModal(event)">
+    <div class="photo-modal-content" onclick="event.stopPropagation()">
+      <div class="photo-modal-header">
+        <div class="photo-modal-title" id="modal-room-title">숙소 사진 갤러리</div>
+        <button class="photo-modal-close" onclick="closePhotoModal()">&times;</button>
+      </div>
+      <div class="photo-modal-count" id="modal-photo-count">총 0장</div>
+      <div class="photo-gallery-grid" id="modal-gallery-grid"></div>
+    </div>
+  </div>
+  
 </body>
 </html>

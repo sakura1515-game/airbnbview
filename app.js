@@ -1,11 +1,12 @@
 // 🔑 비밀번호 7979
 const APP_PIN = "7979";
 
-// 새로 배포한 웹 앱 URL을 입력하세요.
+// 새로 배포한 웹 앱 URL
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzJXdEDwAtsiGKRC2Uh91HG6wHLIQZx_iWj49yEzOCuYHS36FJ-BihTOv3VCg9TgXHC/exec";
 
 var globalData = null;
 var currentRecFilter = 'all';
+var currentFeedFilter = 'all';
 var profileSortMode = 'default';
 var isTransposedMode = false;
 
@@ -52,7 +53,6 @@ function fetchData() {
   .then(function(data) {
     if (data.error) throw new Error(data.message);
 
-    // 💡 [핵심] 가공되지 않은 순수 원본 2차원 배열을 브라우저에서 직접 빌드
     globalData = parseRawSheetsData(data);
 
     document.getElementById('loading').style.display = 'none';
@@ -76,8 +76,7 @@ function fetchData() {
 }
 
 // ----------------------------------------------------
-// 원본 2차원 시트 배열을 무손실로 앱 데이터로 조립하는 파서
-// (이중 할인 방지 + 중앙값 필터링 + 자체 가격추천 엔진 탑재)
+// 원본 2차원 시트 배열 파서
 // ----------------------------------------------------
 function parseRawSheetsData(res) {
   var raw = res.raw || {};
@@ -102,6 +101,12 @@ function parseRawSheetsData(res) {
     var tit = String(pRow[2] || '').trim();
     var isMy = cat.indexOf('내 숙소') !== -1 || cat.indexOf('내숙소') !== -1 || tit.indexOf('★내') !== -1 || pi === 1;
 
+    // 💡 [추가] R열(18번째 열, 인덱스 17) 전체 사진 콤마 문자열을 배열로 변환
+    var rawPhotos = String(pRow[17] || '').trim();
+    var photoList = rawPhotos 
+      ? rawPhotos.split(',').map(function(u) { return u.trim(); }).filter(Boolean) 
+      : [];
+
     var profObj = {
       category: cat,
       roomId: String(pRow[1] || '').trim(),
@@ -119,6 +124,13 @@ function parseRawSheetsData(res) {
       occ60: parsePct(pRow[13]),
       weekendOcc60: parsePct(pRow[14]),
       weekdayOcc60: parsePct(pRow[15]),
+
+      // 💡 [추가] Q열(17번째 열, 인덱스 16): 대표 메인 이미지 URL
+      imageUrl: String(pRow[16] || '').trim(),
+
+      // 💡 [추가] R열(18번째 열, 인덱스 17): 전체 사진 URL 목록 배열
+      allPhotos: photoList,
+
       isMyRoom: isMy
     };
 
@@ -191,8 +203,11 @@ function parseRawSheetsData(res) {
     var nRow = dNotes[ri] || [];
     if (!row || !row[0]) continue;
 
-    var rawDateStr = String(row[0]).trim();
-    var mmdd = rawDateStr.length >= 10 ? rawDateStr.substring(5).replace('-', '/') : rawDateStr;
+    // 💡 [시간 분리] 00:00 제거 후 순수 YYYY-MM-DD만 추출
+    var rawFull = String(row[0]).trim();
+    var cleanDateStr = rawFull.split(' ')[0];
+    var dMatch = cleanDateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+    var mmdd = dMatch ? (dMatch[2] + '/' + dMatch[3]) : cleanDateStr;
 
     var myData = { status: '-', price: '-', note: '' };
     var comps = [];
@@ -205,7 +220,6 @@ function parseRawSheetsData(res) {
       var pVal = formatCompactPrice(pRaw);
       var noteVal = String(nRow[meta.pCol] || '').trim();
 
-      // 공실이 아니면 실제 마감으로 판정
       var isClosed = (sVal !== '-' && sVal !== '미확인' && sVal.indexOf('공실') === -1);
       if (isClosed) bookedRooms++;
 
@@ -221,7 +235,7 @@ function parseRawSheetsData(res) {
 
     matrixData.rows.push({
       date: mmdd,
-      fullDate: rawDateStr,
+      fullDate: cleanDateStr,
       weekday: String(row[1] || '').trim(),
       marketRate: marketRateExact,
       marketCount: bookedRooms + '/' + totalRooms,
@@ -230,15 +244,12 @@ function parseRawSheetsData(res) {
     });
   }
 
-  // ----------------------------------------------------
   // 3. 실전 가격 추천 & 진단 엔진 (이중 할인 방지 + 중앙값 필터링)
-  // ----------------------------------------------------
   var recSheet = raw.recommendation || [];
   var dailyRecs = [];
   var urgentActions = [];
-  var MIN_ROOM_PRICE = 65000; // 최저 마지노선 요금 (하한선)
+  var MIN_ROOM_PRICE = 65000;
 
-  // 내 숙소 기본 정가 기준값 (숙소 프로필 기본 요금 연동)[cite: 2]
   var myBaseWeekday = myProfile ? (parseInt(String(myProfile.weekdayPrice).replace(/[^\d]/g, ''), 10) || 100000) : 100000;
   var myBaseWeekend = myProfile ? (parseInt(String(myProfile.weekendPrice).replace(/[^\d]/g, ''), 10) || 150000) : 150000;
 
@@ -246,14 +257,17 @@ function parseRawSheetsData(res) {
     var recRow = recSheet[rj];
     if (!recRow || !recRow[0]) continue;
 
-    var dateStr = String(recRow[0]).trim();
+    // 💡 [시간 분리] 가격 추천 행 날짜에서도 시간 분리
+    var dateStr = String(recRow[0]).trim().split(' ')[0];
     var tDate = new Date(dateStr);
     tDate.setHours(0, 0, 0, 0);
 
     var diffDays = !isNaN(tDate.getTime()) ? Math.round((tDate - today) / (1000 * 60 * 60 * 24)) : 999;
     var dDayStr = diffDays >= 0 ? 'D-' + diffDays : 'D+' + Math.abs(diffDays);
 
-    var mmddShort = dateStr.length >= 10 ? dateStr.substring(5).replace('-', '/') : dateStr;
+    var recMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+    var mmddShort = recMatch ? (recMatch[2] + '/' + recMatch[3]) : dateStr;
+
     var matchedM = matrixData.rows.find(function(mr) { return mr.date === mmddShort || mr.fullDate === dateStr; });
 
     var realMarketRate = matchedM ? matchedM.marketRate : 0;
@@ -261,7 +275,6 @@ function parseRawSheetsData(res) {
     var weekdayStr = String(recRow[1] || '');
     var isWeekend = (weekdayStr === '금' || weekdayStr === '토');
 
-    // 내 현재 요금 파싱
     var myPriceVal = recRow[4] || '-';
     var myPriceNum = parseInt(String(myPriceVal).replace(/[^\d]/g, ''), 10);
     if (isNaN(myPriceNum) || myPriceNum <= 0) {
@@ -269,7 +282,6 @@ function parseRawSheetsData(res) {
       myPriceVal = myPriceNum > 0 ? myPriceNum : '-';
     }
 
-    // 💡 [중앙값 계산] 해당 날짜의 경쟁사 실시간 공실 요금 추출 및 고가 프리미엄 이상치 필터링
     var validCompPrices = [];
     var maxAllowedPrice = Math.round((isWeekend ? myBaseWeekend : myBaseWeekday) * 1.8);
 
@@ -291,9 +303,6 @@ function parseRawSheetsData(res) {
       medianCompPrice = validCompPrices[mid];
     }
 
-    // ----------------------------------------------------
-    // 실전 진단 및 권장 요금 계산
-    // ----------------------------------------------------
     var isMyBooked = (myStatusStr.indexOf('공실') === -1 && myStatusStr !== '-' && myStatusStr !== '미확인');
     var diagnosisStr = '적정 가격 유지';
     var suggestedPrice = myPriceNum;
@@ -304,26 +313,20 @@ function parseRawSheetsData(res) {
       suggestedPrice = '-';
       actionStr = '판매 완료 (조치 불필요)';
     } else {
-      // 💡 [규칙 A] 평일(일~목) 임박 공실: 이중 할인 방지 로직 적용
       if (!isWeekend && diffDays <= 7) {
         var refBasePrice = myBaseWeekday > 0 ? myBaseWeekday : myPriceNum;
         var targetPrice = myPriceNum;
 
         if (diffDays <= 2) {
-          // D-2 이내: 기본 정가의 80%를 최종 목표가로 설정
           targetPrice = Math.round((refBasePrice * 0.80) / 1000) * 1000;
         } else if (diffDays <= 4) {
-          // D-4 ~ D-3: 기본 정가의 88%를 최종 목표가로 설정
           targetPrice = Math.round((refBasePrice * 0.88) / 1000) * 1000;
         } else {
-          // D-7 ~ D-5: 경쟁 숙소 중앙값 수준을 목표가로 설정
           targetPrice = (medianCompPrice > 0 && medianCompPrice < refBasePrice) ? medianCompPrice : refBasePrice;
         }
 
-        // 최저 마지노선 적용[cite: 1]
         targetPrice = Math.max(targetPrice, MIN_ROOM_PRICE);
 
-        // 🛡️ 이중 할인 방지 검증: 이미 목표가 이하로 낮춰놓은 상태인가?
         if (myPriceNum <= targetPrice) {
           suggestedPrice = myPriceNum;
           if (myPriceNum <= MIN_ROOM_PRICE) {
@@ -334,18 +337,14 @@ function parseRawSheetsData(res) {
             actionStr = '이미 충분한 임박 할인가가 적용되어 있습니다. 추가 인하 없이 예약을 대기하세요.';
           }
         } else {
-          // 정가 대비 목표가까지 인하 권장
           suggestedPrice = targetPrice;
           diagnosisStr = (diffDays <= 2) ? '직전 공실 위험' : (diffDays <= 4 ? '평일 임박 미판매' : '주변 대비 고평가');
           actionStr = '기본 정가 대비 ' + Math.round((1 - targetPrice / refBasePrice) * 100) + '% 할인된 ₩' + targetPrice.toLocaleString() + '원으로 현실화 권장.';
         }
-      }
-      // 💡 [규칙 B] 주말(금, 토) 로직
-      else if (isWeekend) {
+      } else if (isWeekend) {
         var refWkndBase = myBaseWeekend > 0 ? myBaseWeekend : myPriceNum;
 
         if (diffDays <= 2 && realMarketRate < 50) {
-          // 주말 이례적 부진: 정가의 85% 목표가
           var targetWknd = Math.max(Math.round((refWkndBase * 0.85) / 1000) * 1000, MIN_ROOM_PRICE);
           if (myPriceNum <= targetWknd) {
             suggestedPrice = myPriceNum;
@@ -357,7 +356,6 @@ function parseRawSheetsData(res) {
             actionStr = '주말 수요 부진 감지. 막판 15% 할인으로 예약 체결을 유도하세요.';
           }
         } else if (realMarketRate >= 75) {
-          // 주말 공급 부족: 마감률 75% 이상 시 12% 프리미엄 인상 권장
           var calcP = Math.max(myPriceNum, Math.round((myPriceNum * 1.12) / 1000) * 1000);
           suggestedPrice = calcP;
           diagnosisStr = '공급 부족 (수요 강세)';
@@ -367,9 +365,7 @@ function parseRawSheetsData(res) {
           diagnosisStr = '적정 가격 유지';
           actionStr = '주말 수요에 맞춘 표준 요금 유지 중입니다.';
         }
-      }
-      // 💡 [규칙 C] D-8 이상의 중장기 날짜
-      else {
+      } else {
         if (realMarketRate >= 70) {
           var calcP = Math.round((myPriceNum * 1.15) / 1000) * 1000;
           suggestedPrice = calcP;
@@ -403,16 +399,14 @@ function parseRawSheetsData(res) {
 
     dailyRecs.push(item);
 
-    // 상단 '오늘의 권장 조치' 자동 채택 (가격 변경이 실제로 필요한 날짜만 선별)
     if (!isMyBooked && suggestedPrice !== '-' && suggestedPrice !== myPriceNum) {
       urgentActions.push(item);
     }
   }
 
-  // D-Day 오름차순(가까운 날짜 우선) 정렬
   urgentActions.sort(function(a, b) { return a.diffDays - b.diffDays; });
 
-  // 4. 숙소 진단 리포트 원본 파싱
+  // 4. 진단 리포트 원본 보존
   var aSheet = raw.audit || [];
   var auditSections = [];
   var curSec = null;
@@ -435,6 +429,7 @@ function parseRawSheetsData(res) {
 
   return {
     updatedAt: res.updatedAt || '-',
+    raw: raw, // 💡 [필수] 피드 파싱을 위한 원본 유지
     myProfile: myProfile,
     profiles: profiles,
     marketAvg: marketAvg,
@@ -454,7 +449,7 @@ function switchTab(tabId, el) {
 }
 
 // ----------------------------------------------------
-// 대시보드 렌더링
+// 1. 대시보드 탭 로직
 // ----------------------------------------------------
 function toggleMatrixMode() {
   isTransposedMode = !isTransposedMode;
@@ -479,6 +474,9 @@ function renderTabDash() {
   }
 }
 
+// ----------------------------------------------------
+// 1. 대시보드 렌더링 (각 셀에 좌표 ID 부여)
+// ----------------------------------------------------
 function renderStandardDash() {
   var m = globalData.matrixData;
   if (!m || !m.rows || m.rows.length === 0) return;
@@ -495,13 +493,18 @@ function renderStandardDash() {
   var bHtml = '';
   m.rows.forEach(function(row) {
     var dayCls = (row.weekday === '토') ? 'day-sat' : ((row.weekday === '일') ? 'day-sun' : '');
+    var cleanFullDate = row.fullDate;
 
-    bHtml += '<tr>' +
+    // 💡 내 숙소 셀 ID: cell-{날짜}-my
+    bHtml += '<tr id="dash-row-' + cleanFullDate + '">' +
       '<td class="col-fixed-1"><div>' + row.date + '</div><div class="' + dayCls + '" style="font-size:0.62rem;">(' + row.weekday + ')</div></td>' +
       '<td class="col-fixed-2"><div style="color:var(--yellow);font-weight:700;">' + row.marketRate + '%</div><div style="font-size:0.6rem;color:var(--text-sub);">' + row.marketCount + '</div></td>' +
-      '<td class="col-fixed-3">' + makeCellContent(row.myRoom) + '</td>';
+      '<td class="col-fixed-3" id="cell-' + cleanFullDate + '-my">' + makeCellContent(row.myRoom) + '</td>';
 
-    row.comps.forEach(function(cRoom) { bHtml += '<td class="col-comp">' + makeCellContent(cRoom) + '</td>'; });
+    // 💡 경쟁 숙소 셀 ID: cell-{날짜}-{compIndex}
+    row.comps.forEach(function(cRoom, cIdx) {
+      bHtml += '<td class="col-comp" id="cell-' + cleanFullDate + '-' + cIdx + '">' + makeCellContent(cRoom) + '</td>';
+    });
     bHtml += '</tr>';
   });
   document.getElementById('matrix-body').innerHTML = bHtml;
@@ -572,6 +575,7 @@ function makeCellContent(room) {
 }
 
 function goToProfile(target) {
+  // 1. 프로필 탭으로 전환
   var profTabBtn = document.querySelectorAll('.tab-item')[0];
   switchTab('prof', profTabBtn);
 
@@ -596,26 +600,44 @@ function goToProfile(target) {
     }
 
     if (targetCard) {
-      targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // 기존 하이라이트 클래스 제거
       targetCard.classList.remove('highlight-target');
-      void targetCard.offsetWidth;
-      targetCard.classList.add('highlight-target');
+
+      // 💡 [핵심] 스크롤이 완전히 끝난 후 노란색 강조 효과 실행
+      var triggerHighlight = function() {
+        void targetCard.offsetWidth; // 리플로우 강제 트리거
+        targetCard.classList.add('highlight-target');
+      };
+
+      // 부드러운 스크롤 시작
+      targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // 모던 브라우저: 스크롤 완료 이벤트 감지 (1회성 실행)
+      if ('onscrollend' in window) {
+        window.addEventListener('scrollend', function onEnd() {
+          window.removeEventListener('scrollend', onEnd);
+          triggerHighlight();
+        }, { once: true });
+      }
+
+      // 구형 브라우저 및 안전망 폴백: 스크롤 이동 시간(약 450ms) 후 보장 실행
+      setTimeout(function() {
+        if (!targetCard.classList.contains('highlight-target')) {
+          triggerHighlight();
+        }
+      }, 500);
     }
   }, 120);
 }
 
 // ----------------------------------------------------
-// 가격 추천 & 액션 보드 탭 렌더링
-// ----------------------------------------------------
-// ----------------------------------------------------
-// 가격 추천 & 액션 보드 탭 렌더링 (가시성 & 색상 강화)
+// 2. 가격 추천 & 액션 보드 탭 렌더링
 // ----------------------------------------------------
 function renderTabRec() {
   if (globalData.myProfile && globalData.marketAvg) {
     var p = globalData.myProfile;
     var m = globalData.marketAvg;
 
-    // D-7 이내 미판매 일수 집계
     var d7VacantCount = 0;
     (globalData.dailyRecs || []).forEach(function(it) {
       if (it.diffDays >= 0 && it.diffDays <= 7) {
@@ -626,7 +648,6 @@ function renderTabRec() {
     });
     document.getElementById('kpi-d7').innerText = d7VacantCount + '일';
 
-    // 30일 평일, 주말, 60일 전체 점유율
     setKpi('kpi-wkday', 'diff-wkday', Number(p.mWeekdayOcc || 0), Number(m.mWeekdayOcc || 0));
     setKpi('kpi-wknd', 'diff-wknd', Number(p.mWeekendOcc || 0), Number(m.mWeekendOcc || 0));
     setKpi('kpi-60', 'diff-60', Number(p.occ60 || 0), Number(m.occ60 || 0));
@@ -689,9 +710,16 @@ function renderUrgentActionCards() {
       diffText = '-₩13,000 조정';
     }
 
+    var cDateClean = String(it.date).trim().split(' ')[0];
+    var cMatch = cDateClean.match(/(\d{4})-(\d{2})-(\d{2})/);
+    var dateBadgeText = cMatch ? (cMatch[2] + '/' + cMatch[3]) : cDateClean;
+
+    // 💡 날짜 뱃지 클릭 시 해당 날짜 대시보드로 이동
     html += '<div class="' + cardCls + '">' +
       '<div class="card-top">' +
-        '<span class="date-badge">' + String(it.date).substring(5) + ' (' + it.weekday + ') <small>' + it.dDay + '</small></span>' +
+        '<span class="date-badge clickable-date" onclick="jumpToDashboardDate(\'' + cDateClean + '\')" title="대시보드 해당 날짜로 이동">' + 
+          dateBadgeText + ' (' + it.weekday + ') <small>' + it.dDay + '</small> ↗' +
+        '</span>' +
         '<span class="tag ' + tagCls + '">' + tagEmoji + ' ' + diag + '</span>' +
       '</div>' +
       '<div class="price-compare">' +
@@ -713,9 +741,6 @@ function setRecFilter(mode, btn) {
   renderRecList();
 }
 
-// ----------------------------------------------------
-// renderRecList (마감 톤다운 & 회색톤 날짜 컬러 적용)
-// ----------------------------------------------------
 function renderRecList() {
   var cont = document.getElementById('daily-rec-container');
   var list = globalData.dailyRecs || [];
@@ -736,13 +761,13 @@ function renderRecList() {
     var badgeCls = isMyVacant ? 'badge-vacant' : 'badge-booked';
     var statusText = isMyVacant ? '내방 공실' : '내방 마감';
 
-    var dateParts = String(d.date).split('-');
-    var mmdd = dateParts.length >= 3 ? dateParts[1] + '/' + dateParts[2] : d.date;
+    var cleanDateStr = String(d.date).trim().split(' ')[0];
+    var dMatch = cleanDateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+    var mmdd = dMatch ? (dMatch[2] + '/' + dMatch[3]) : cleanDateStr;
 
     var isSat = d.weekday === '토';
     var isSun = d.weekday === '일';
 
-    // 💡 [개선] 마감된 날짜는 전체 톤다운 + 회색톤의 블루/레드 적용
     var itemRowCls = isMyVacant ? 'daily-item' : 'daily-item is-booked-row';
     var dateColorCls = '';
 
@@ -771,7 +796,7 @@ function renderRecList() {
     }
 
     var matchingMRow = matrixRows.find(function(mr) {
-      return mr.date === mmdd || d.date.indexOf(mr.date) !== -1;
+      return mr.date === mmdd || mr.fullDate === cleanDateStr;
     });
 
     var compChipsHtml = '';
@@ -801,9 +826,10 @@ function renderRecList() {
       }
     }
 
+    // 💡 date-box 클릭 시 jumpToDashboardDate 실행
     html += '<div class="' + itemRowCls + '">' +
       '<div class="daily-main-row">' +
-        '<div class="date-box">' +
+        '<div class="date-box clickable-date" onclick="jumpToDashboardDate(\'' + cleanDateStr + '\')" title="대시보드 해당 날짜로 이동">' +
           '<div class="d-day-num ' + dateColorCls + '">' + mmdd + '</div>' +
           '<div class="d-day-sub ' + dateColorCls + '">' + d.dDay + ' (' + d.weekday + ')</div>' +
         '</div>' +
@@ -825,7 +851,7 @@ function renderRecList() {
 }
 
 // ----------------------------------------------------
-// 숙소 프로필 탭 렌더링 (네이버 지도 앱 연동 반영)
+// 3. 숙소 프로필 탭 렌더링
 // ----------------------------------------------------
 function sortProfiles(mode, btn) {
   profileSortMode = mode;
@@ -872,7 +898,6 @@ function renderTabProf() {
 
     var cardId = isMy ? 'prof-card-my' : ('prof-card-' + (p.roomId || idx));
 
-    // 💡 [신규] 네이버 지도 앱/웹 검색 URL 생성
     var rawAddr = String(p.address || '').trim();
     var mapHtml = '<span>주소 정보 없음</span>';
 
@@ -884,7 +909,18 @@ function renderTabProf() {
                 '</a>';
     }
 
+    // 💡 [핵심] 대표 썸네일 및 앨범 열기 트리거
+    var totalPhotos = (p.allPhotos && p.allPhotos.length > 0) ? p.allPhotos.length : (p.imageUrl ? 1 : 0);
+    var imgHtml = '';
+    if (p.imageUrl && p.imageUrl.indexOf('http') === 0) {
+      imgHtml = '<div class="p-image-box" onclick="openPhotoModal(\'' + (p.roomId || idx) + '\')">' +
+                  '<img src="' + p.imageUrl + '" alt="' + p.title + '" class="p-thumb-img" loading="lazy" />' +
+                  (totalPhotos > 1 ? '<span class="p-photo-badge">📷 ' + totalPhotos + '장 사진보기</span>' : '') +
+                '</div>';
+    }
+
     html += '<div id="' + cardId + '" class="' + cardCls + '" data-title="' + p.title + '">' +
+      imgHtml +
       '<div class="p-header">' +
         '<a href="' + airbnbUrl + '" target="_blank" class="p-title-link">' +
           p.title + ' <span style="font-size:0.75rem; color:var(--accent);">↗</span>' +
@@ -922,11 +958,14 @@ function getOccClass(val) {
   return 'occ-low';
 }
 
-var currentFeedFilter = 'all';
-
+// ----------------------------------------------------
+// 4. 시장동향 탭 렌더링 (가로 스크롤 브리핑 + 5종 필터 + 점프 링크)
+// ----------------------------------------------------
 function toggleBriefingBody() {
-  var bBody = document.getElementById('briefing-text');
-  bBody.style.display = (bBody.style.display === 'none') ? 'block' : 'none';
+  var bWrapper = document.getElementById('briefing-scroll-wrapper');
+  if (bWrapper) {
+    bWrapper.style.display = (bWrapper.style.display === 'none') ? 'block' : 'none';
+  }
 }
 
 function setFeedFilter(mode, btn) {
@@ -936,84 +975,161 @@ function setFeedFilter(mode, btn) {
   renderTabAudit();
 }
 
-
-// ----------------------------------------------------
-// 진단 리포트 탭 렌더링
-// ----------------------------------------------------
 function renderTabAudit() {
-  // 1. 카카오톡 브리핑 아카이브 렌더링
-  var briefings = (globalData.raw && globalData.raw.briefing) ? globalData.raw.briefing : [];
+  var raw = (globalData && globalData.raw) ? globalData.raw : {};
+
+  // 1. 카카오톡 브리핑 아카이브 (최근 최대 20개 가로 스크롤 카드)
+  var briefings = raw.briefing || [];
   var briefingContainer = document.getElementById('briefing-container');
-  
-  if (briefings.length > 1) {
-    var latest = briefings[briefings.length - 1]; // 가장 최신 브리핑
-    document.getElementById('briefing-date-badge').innerText = latest[0] + ' ▾ (터치하여 펼치기)';
-    document.getElementById('briefing-text').innerText = latest[1];
-    briefingContainer.style.display = 'block';
-  } else {
-    briefingContainer.style.display = 'none';
+  var briefingCardsList = document.getElementById('briefing-cards-list');
+
+  if (briefingContainer && briefingCardsList) {
+    if (briefings.length > 1) {
+      var briefingRows = briefings.slice(1); // 헤더 제외
+      var latest = briefingRows[briefingRows.length - 1];
+      document.getElementById('briefing-date-badge').innerText = (latest[0] || '-') + ' (' + briefingRows.length + '건) ▾ 터치하여 열기';
+
+      // 최근 20개 역순(최신순) 추출
+      var recentBriefings = briefingRows.slice(-20).reverse();
+      var bCardsHtml = '';
+
+      recentBriefings.forEach(function(bItem, idx) {
+        var timeStr = bItem[0] || '-';
+        var contentStr = bItem[1] || '내용 없음';
+
+        bCardsHtml += '<div class="briefing-mini-card">' +
+          '<div class="briefing-card-top">' +
+            '<span class="briefing-card-time">📅 ' + timeStr + '</span>' +
+            '<span style="font-size:0.65rem; color:var(--text-sub);">' + (idx === 0 ? '✨ 최신' : '') + '</span>' +
+          '</div>' +
+          '<div class="briefing-card-body">' + contentStr + '</div>' +
+        '</div>';
+      });
+
+      briefingCardsList.innerHTML = bCardsHtml;
+      briefingContainer.style.display = 'block';
+    } else {
+      briefingContainer.style.display = 'none';
+    }
   }
 
-  // 2. 피드 데이터 빌드 (스냅샷 체결 기록 + 대시보드 요금 메모 변동 기록)
+  // 2. 피드 데이터 수집
   var feeds = [];
+  var compTitles = (globalData.matrixData && globalData.matrixData.compTitles) ? globalData.matrixData.compTitles : [];
   var compMap = {};
-  (globalData.profiles || []).forEach(function(p) { compMap[p.roomId] = p.title; });
-  if (globalData.myProfile) compMap[globalData.myProfile.roomId] = globalData.myProfile.title;
+  var compIndexMap = {};
+
+  (globalData.profiles || []).forEach(function(p, idx) {
+    compMap[p.roomId] = p.title;
+    compIndexMap[p.roomId] = idx;
+    compIndexMap[p.title] = idx;
+  });
+  if (globalData.myProfile) {
+    compMap[globalData.myProfile.roomId] = globalData.myProfile.title;
+    compIndexMap[globalData.myProfile.roomId] = 'my';
+  }
 
   // A) 체결 기록 파싱 (_스냅샷DB)
-  var snapshots = (globalData.raw && globalData.raw.snapshot) ? globalData.raw.snapshot : [];
+  var snapshots = raw.snapshot || [];
   for (var s = 1; s < snapshots.length; s++) {
     var sRow = snapshots[s];
-    var sRoomId = String(sRow[0] || '').trim();
-    var sDate = String(sRow[1] || '').trim();
-    var bookedDate = String(sRow[4] || '').trim();
-    var finalPrice = sRow[5] || 0;
+    if (!sRow || sRow.length < 3) continue;
 
-    if (bookedDate && finalPrice) {
-      var rName = compMap[sRoomId] || ('숙소 ' + sRoomId.substring(0, 5));
+    var sRoomId = String(sRow[0] || '').trim();
+    var targetDateRaw = String(sRow[1] || '').trim().split(' ')[0];
+    var sStatus = String(sRow[2] || '').trim();
+    var bookedTimestamp = String(sRow[4] || '').trim();
+    var finalPrice = sRow[5] || sRow[3] || 0;
+
+    if (bookedTimestamp || sStatus.indexOf('마감') !== -1) {
+      var rName = compMap[sRoomId] || ('숙소 ' + sRoomId.substring(0, 6));
+      var targetTargetIdx = (sRoomId === (globalData.myProfile && globalData.myProfile.roomId)) ? 'my' : (compIndexMap[sRoomId] !== undefined ? compIndexMap[sRoomId] : 0);
+
+      var timeDisplay = bookedTimestamp ? (bookedTimestamp.length > 10 ? bookedTimestamp.substring(5) : bookedTimestamp) + ' 마감' : '예약 마감';
+      var priceNum = parseInt(String(finalPrice).replace(/[^\d]/g, ''), 10);
+      var priceText = (!isNaN(priceNum) && priceNum > 0) ? ' (최종가: ₩' + priceNum.toLocaleString() + ')' : '';
+
+      var tMatch = targetDateRaw.match(/(\d{4})-(\d{2})-(\d{2})/);
+      var shortTargetDate = tMatch ? (tMatch[2] + '/' + tMatch[3]) : targetDateRaw;
+
       feeds.push({
         type: 'booked',
         roomName: rName,
-        date: sDate,
-        timeStr: bookedDate + ' 마감',
-        desc: '예약 체결 (최종가: ' + fmtPrice(finalPrice) + ')',
-        detail: '경쟁 숙소의 잔여 객실이 판매 마감되었습니다.',
-        sortKey: bookedDate
+        date: shortTargetDate,
+        fullDate: targetDateRaw,
+        roomTarget: targetTargetIdx,
+        timeStr: timeDisplay,
+        desc: '예약 체결' + priceText,
+        detail: '경쟁 숙소의 잔여 객실이 판매 마감되었습니다. (터치 시 대시보드 이동)',
+        sortKey: bookedTimestamp || targetDateRaw
       });
     }
   }
 
-  // B) 가격 변동 기록 파싱 (대시보드 메모 Note 추출)
-  var dSheet = (globalData.raw && globalData.raw.dashboard) ? globalData.raw.dashboard : [];
-  var dNotes = (globalData.raw && globalData.raw.dashboardNotes) ? globalData.raw.dashboardNotes : [];
-  var roomMeta = (globalData.matrixData && globalData.matrixData.compTitles) ? globalData.matrixData.compTitles : [];
+// B) 가격 변동 기록 파싱 (대시보드 메모 Note 추출 -> 숙소 프로필의 온전한 풀네임과 1:1 연결)
+  var dSheet = raw.dashboard || [];
+  var dNotes = raw.dashboardNotes || [];
+  var compProfiles = globalData.profiles || [];
 
-  for (var rIdx = 2; rIdx < dSheet.length; rIdx++) {
-    var targetDate = String(dSheet[rIdx][0] || '').substring(5);
+  // 대시보드 요금 열(cIdx)을 숙소 프로필의 온전한 풀네임과 직접 매핑
+  var colToFullNameMap = {};
+
+  // 1. 내 숙소 풀네임 매핑 (G열=상태, H열(index 7)=가격)
+  if (globalData.myProfile) {
+    colToFullNameMap[7] = {
+      title: globalData.myProfile.title || '내 숙소',
+      targetIdx: 'my'
+    };
+  }
+
+  // 2. 경쟁 숙소 풀네임 매핑 (I열/J열부터 2열씩 증가하며 compProfiles 순서와 1:1 매칭)
+  // cIdx 9, 11, 13... 순서대로 compProfiles[0], [1], [2]...의 원본 타이틀 연결
+  for (var cpIdx = 0; cpIdx < compProfiles.length; cpIdx++) {
+    var priceColIdx = 9 + (cpIdx * 2); // 9: 첫번째 경쟁사 요금열, 11: 두번째, 13: 세번째...
+    var fullTitle = compProfiles[cpIdx].title || ('경쟁 숙소 ' + (cpIdx + 1));
+
+    colToFullNameMap[priceColIdx] = {
+      title: fullTitle,
+      targetIdx: cpIdx
+    };
+  }
+
+  for (var rIdx = 1; rIdx < dSheet.length; rIdx++) {
+    var dRow = dSheet[rIdx];
     var nRow = dNotes[rIdx] || [];
+    if (!dRow || !dRow[0]) continue;
 
-    // 숙소 요금 열 순회
+    var cleanRowDate = String(dRow[0]).trim().split(' ')[0];
+    var dtMatch = cleanRowDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+    var targetDate = dtMatch ? (dtMatch[2] + '/' + dtMatch[3]) : cleanRowDate;
+
+    // 요금 열(7, 9, 11, 13...) 순회
     for (var cIdx = 7; cIdx < nRow.length; cIdx += 2) {
       var noteText = String(nRow[cIdx] || '').trim();
       if (!noteText) continue;
 
-      var compTitle = dSheet[0] && dSheet[0][cIdx - 1] ? String(dSheet[0][cIdx - 1]).replace(/\[.*?\]|\s*상태/g, '').trim() : '경쟁사';
+      // 💡 [핵심] 대시보드의 잘린 이름이 아닌, 프로필의 온전한 원본 풀네임 조회
+      var roomInfo = colToFullNameMap[cIdx] || { title: '경쟁 숙소', targetIdx: Math.floor((cIdx - 9) / 2) };
+      var compTitleRaw = roomInfo.title;
+      var compTargetIdx = roomInfo.targetIdx;
 
-      // 메모 라인별 파싱 ("• MM/DD HH:MM : ₩XX (▼/▲ 변동)")
       var lines = noteText.split('\n');
       lines.forEach(function(line) {
-        if (line.indexOf('▼') !== -1 || line.indexOf('▲') !== -1) {
-          var isDown = line.indexOf('▼') !== -1;
-          var timeMatch = line.match(/•\s*(\d{2}\/\d{2}\s*\d{2}:\d{2})/);
-          var timeStr = timeMatch ? timeMatch[1] : '-';
+        var cleanLine = line.trim();
+        if (cleanLine.indexOf('할인') !== -1 || cleanLine.indexOf('인상') !== -1 || cleanLine.indexOf('▼') !== -1 || cleanLine.indexOf('▲') !== -1) {
+          var isDown = cleanLine.indexOf('할인') !== -1 || cleanLine.indexOf('▼') !== -1;
+          var timeMatch = cleanLine.match(/•?\s*(\d{2}\/\d{2}\s*\d{2}:\d{2})/);
+          var timeStr = timeMatch ? timeMatch[1] : '최근';
 
           feeds.push({
             type: isDown ? 'down' : 'up',
-            roomName: compTitle,
+            roomName: compTitleRaw, // 💡 숙소 프로필과 동일한 100% 원본 풀네임 적용
             date: targetDate,
+            fullDate: cleanRowDate,
+            roomTarget: compTargetIdx,
             timeStr: timeStr,
             desc: isDown ? '가격 할인 감지' : '가격 인상 감지',
-            detail: line.replace(/•\s*\d{2}\/\d{2}\s*\d{2}:\d{2}\s*:\s*/, ''),
+            detail: cleanLine.replace(/^[•\s\d\/:*]+/, '') + ' (터치 시 대시보드 이동)',
             sortKey: timeStr
           });
         }
@@ -1024,9 +1140,10 @@ function renderTabAudit() {
   // 최신순 정렬
   feeds.sort(function(a, b) { return String(b.sortKey).localeCompare(String(a.sortKey)); });
 
-  // 3. 필터 적용
+  // 3. 필터 적용 (가격변동 'price_change' 추가)[cite: 3]
   var filteredFeeds = feeds.filter(function(f) {
     if (currentFeedFilter === 'booked') return f.type === 'booked';
+    if (currentFeedFilter === 'price_change') return f.type === 'down' || f.type === 'up';
     if (currentFeedFilter === 'down') return f.type === 'down';
     if (currentFeedFilter === 'up') return f.type === 'up';
     return true;
@@ -1034,18 +1151,22 @@ function renderTabAudit() {
 
   // 4. 피드 목록 렌더링
   var cont = document.getElementById('feed-container');
+  if (!cont) return;
+
   if (filteredFeeds.length === 0) {
-    cont.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-sub);">기록된 시장 변동 내역이 없습니다.</div>';
+    cont.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-sub);line-height:1.6;">' +
+      '선택한 필터 조건의 변동 피드가 없습니다.<br>' +
+      '</div>';
     return;
   }
 
   var html = '';
   filteredFeeds.forEach(function(f) {
-    var cardCls = 'feed-card feed-' + f.type;
+    var cardCls = 'feed-card clickable-feed feed-' + f.type;
     var descCls = 'feed-desc ' + f.type;
     var icon = (f.type === 'booked') ? '🚨' : ((f.type === 'down') ? '📉' : '📈');
 
-    html += '<div class="' + cardCls + '">' +
+    html += '<div class="' + cardCls + '" onclick="jumpToDashboardCell(\'' + f.fullDate + '\', \'' + f.roomTarget + '\')">' +
       '<div class="feed-top">' +
         '<div class="feed-room">' + icon + ' ' + f.roomName + '</div>' +
         '<div class="feed-time">' + f.timeStr + '</div>' +
@@ -1059,6 +1180,38 @@ function renderTabAudit() {
   });
 
   cont.innerHTML = html;
+}
+
+// ----------------------------------------------------
+// 5. 피드 클릭 시 대시보드 해당 날짜/숙소 셀로 부드럽게 점프
+// ----------------------------------------------------
+function jumpToDashboardCell(fullDate, roomTarget) {
+  // 1. 대시보드 탭 활성화
+  var dashTabBtn = document.querySelectorAll('.tab-item')[1];
+  switchTab('dash', dashTabBtn);
+
+  // 2. 가로 모드일 경우 기본 세로 매트릭스 뷰로 복귀
+  if (isTransposedMode) {
+    toggleMatrixMode();
+  }
+
+  // 3. 약간의 렌더링 딜레이 후 셀 찾아서 스크롤 이동 및 펄스 효과
+  setTimeout(function() {
+    var targetCellId = 'cell-' + fullDate + '-' + roomTarget;
+    var cellEl = document.getElementById(targetCellId);
+
+    // 구체적인 셀을 못 찾은 경우 해당 행(날짜)으로 점프
+    if (!cellEl) {
+      cellEl = document.getElementById('dash-row-' + fullDate);
+    }
+
+    if (cellEl) {
+      cellEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      cellEl.classList.remove('cell-highlight-jump');
+      void cellEl.offsetWidth; // 트리거 리플로우
+      cellEl.classList.add('cell-highlight-jump');
+    }
+  }, 150);
 }
 
 function fmtPrice(v) {
@@ -1149,3 +1302,71 @@ document.addEventListener('click', function(e) {
     hideNoteTooltip();
   }
 });
+
+
+// ----------------------------------------------------
+// 가격추천 탭에서 대시보드의 특정 날짜 행으로 즉시 점프
+// ----------------------------------------------------
+function jumpToDashboardDate(targetDate) {
+  // 1. 대시보드 탭으로 전환
+  var dashTabBtn = document.querySelectorAll('.tab-item')[1];
+  switchTab('dash', dashTabBtn);
+
+  // 2. 가로 모드일 경우 기본 세로 매트릭스 뷰로 복귀
+  if (isTransposedMode) {
+    toggleMatrixMode();
+  }
+
+  // 3. 해당 날짜 행(Row) 탐색 및 스크롤 포커스
+  setTimeout(function() {
+    var cleanDate = String(targetDate).trim().split(' ')[0];
+    var targetRow = document.getElementById('dash-row-' + cleanDate);
+
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRow.classList.remove('row-highlight-jump');
+      void targetRow.offsetWidth; // 리플로우 강제 트리거
+      targetRow.classList.add('row-highlight-jump');
+    }
+  }, 150);
+}
+
+// ----------------------------------------------------
+// 사진 갤러리 모달 제어 함수
+// ----------------------------------------------------
+function openPhotoModal(roomIdOrIdx) {
+  var list = [];
+  if (globalData.myProfile) list.push(globalData.myProfile);
+  if (globalData.profiles) list = list.concat(globalData.profiles);
+
+  var targetProf = list.find(function(p) { return String(p.roomId) === String(roomIdOrIdx); });
+  if (!targetProf && typeof roomIdOrIdx === 'number') {
+    targetProf = list[roomIdOrIdx];
+  }
+  if (!targetProf) return;
+
+  var photos = (targetProf.allPhotos && targetProf.allPhotos.length > 0) 
+    ? targetProf.allPhotos 
+    : (targetProf.imageUrl ? [targetProf.imageUrl] : []);
+
+  document.getElementById('modal-room-title').innerText = targetProf.title;
+  document.getElementById('modal-photo-count').innerText = '총 ' + photos.length + '장의 사진 (클릭 시 원본 새 창 열림)';
+
+  var gridHtml = '';
+  photos.forEach(function(pUrl, idx) {
+    gridHtml += '<div class="photo-gallery-item">' +
+      '<a href="' + pUrl + '" target="_blank">' +
+        '<img src="' + pUrl + '" alt="사진 ' + (idx + 1) + '" loading="lazy" />' +
+      '</a>' +
+    '</div>';
+  });
+
+  document.getElementById('modal-gallery-grid').innerHTML = gridHtml;
+  document.getElementById('photo-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden'; // 배경 스크롤 방지
+}
+
+function closePhotoModal(e) {
+  document.getElementById('photo-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
