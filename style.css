@@ -359,3 +359,43 @@ thead th.col-fixed-trans { z-index: 40; background: #203152; color: var(--accent
   color: #03c75a; /* 네이버 고유 그린 컬러 */
   font-weight: 700;
 }
+
+
+/* ----------------------------------------------------
+   4번째 탭: 실시간 시장 동향 & 활동 피드 디자인
+   ---------------------------------------------------- */
+.briefing-box {
+  background: var(--card-bg); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+}
+.briefing-header {
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; user-select: none;
+}
+.briefing-body {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.75rem; line-height: 1.5; color: #cbd5e1; white-space: pre-wrap;
+}
+
+.feed-timeline { display: flex; flex-direction: column; gap: 8px; }
+.feed-card {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
+  border-left-width: 4px;
+}
+.feed-card.feed-booked { border-left-color: var(--blue); background: rgba(59, 130, 246, 0.04); }
+.feed-card.feed-down { border-left-color: var(--red); background: rgba(244, 63, 94, 0.04); }
+.feed-card.feed-up { border-left-color: var(--green); background: rgba(16, 185, 129, 0.04); }
+
+.feed-top { display: flex; justify-content: space-between; align-items: center; }
+.feed-room { font-size: 0.82rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; }
+.feed-time { font-size: 0.65rem; color: var(--text-sub); }
+
+.feed-content { display: flex; justify-content: space-between; align-items: baseline; margin-top: 2px; }
+.feed-date { font-size: 0.85rem; font-weight: 700; color: #fff; }
+.feed-desc { font-size: 0.75rem; font-weight: 700; }
+.feed-desc.down { color: var(--red); }
+.feed-desc.up { color: var(--green); }
+.feed-desc.booked { color: var(--blue); }
+
+.feed-detail { font-size: 0.7rem; color: var(--text-sub); background: rgba(0,0,0,0.25); padding: 5px 8px; border-radius: 5px; margin-top: 3px; }

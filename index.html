@@ -116,9 +116,29 @@
       <div class="list-card" id="daily-rec-container"></div>
     </div>
 
-    <!-- 탭 4: 숙소 진단 리포트 -->
+    <!-- 탭 4: 실시간 시장 동향 & 체결가 로그 -->
     <div id="tab-audit" class="tab-content">
-      <div class="card" id="audit-container"></div>
+      
+      <!-- 1. 카카오톡 일일 브리핑 아카이브 (최신 브리핑 접이식 카드) -->
+      <div class="briefing-box" id="briefing-container">
+        <div class="briefing-header" onclick="toggleBriefingBody()">
+          <span style="font-weight:700; color:var(--accent);">📢 최근 크롤링 종합 브리핑</span>
+          <span id="briefing-date-badge" style="font-size:0.7rem; color:var(--text-sub);">-</span>
+        </div>
+        <div class="briefing-body" id="briefing-text" style="display:none;"></div>
+      </div>
+
+      <!-- 2. 피드 필터 탭 -->
+      <div class="filter-tabs" style="margin-bottom:12px;">
+        <button class="filter-btn active" onclick="setFeedFilter('all', this)">전체 피드</button>
+        <button class="filter-btn" onclick="setFeedFilter('booked', this)">🚨 마감 체결</button>
+        <button class="filter-btn" onclick="setFeedFilter('down', this)">📉 가격 인하</button>
+        <button class="filter-btn" onclick="setFeedFilter('up', this)">📈 가격 인상</button>
+      </div>
+
+      <!-- 3. 실시간 타임라인 피드 목록 -->
+      <div id="feed-container" class="feed-timeline"></div>
+
     </div>
 
   </div>
@@ -138,8 +158,8 @@
       <div>가격추천</div>
     </div>
     <div class="tab-item" onclick="switchTab('audit', this)">
-      <div class="icon">📊</div>
-      <div>진단리포트</div>
+      <div class="icon">⚡</div>
+      <div>시장동향</div>
     </div>
   </div>
 
